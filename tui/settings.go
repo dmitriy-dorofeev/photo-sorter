@@ -3,10 +3,57 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+// ---------------------------------------------------------------------------
+// Пресеты шаблонов папок (понятные пользователю метки → Go time layouts)
+// ---------------------------------------------------------------------------
+
+type templatePreset struct {
+	label string // например "YYYY/MM/DD"
+	value string // Go layout, например "2006/01/02"
+}
+
+var templatePresets = []templatePreset{
+	{label: "YYYY/MM/DD", value: "2006/01/02"},
+	{label: "YYYY-MM-DD", value: "2006-01-02"},
+	{label: "YYYY/MM", value: "2006/01"},
+	{label: "YYYY", value: "2006"},
+	{label: "Свой формат…", value: ""},
+}
+
+// findPreset ищет пресет по Go-значению. Возвращает индекс и found.
+func findPreset(value string) (int, bool) {
+	for i, p := range templatePresets {
+		if p.value == value {
+			return i, true
+		}
+	}
+	return len(templatePresets) - 1, false // указываем на "Свой формат…"
+}
+
+// formatTemplateDisplay возвращает человекочитаемое представление шаблона.
+func formatTemplateDisplay(value string) string {
+	if value == "" {
+		return "—"
+	}
+	idx, found := findPreset(value)
+	now := time.Now()
+	example := now.Format(value)
+	if found {
+		return fmt.Sprintf("%s (%s)", templatePresets[idx].label, example)
+	}
+	return fmt.Sprintf("Свой формат (%s)", example)
+}
+
+// ---------------------------------------------------------------------------
+// Настройки
+// ---------------------------------------------------------------------------
 
 type settingType int
 
@@ -25,10 +72,12 @@ type setting struct {
 
 // settingsModel — состояние экрана настроек.
 type settingsModel struct {
-	cursor  int
-	items   []setting
-	editing bool
-	input   textinput.Model
+	cursor         int
+	items          []setting
+	editing        bool // true → редактируем custom через textinput
+	templateSelect bool // true → показываем список пресетов
+	templateCursor int  // курсор внутри списка пресетов
+	input          textinput.Model
 }
 
 func newSettingsModel() settingsModel {
@@ -42,7 +91,7 @@ func newSettingsModel() settingsModel {
 			{
 				label: "Шаблон папок",
 				key:   "template",
-				help:  "Go time layout для имени папок",
+				help:  "Формат именования папок по дате",
 				value: "2006/01/02",
 				stype: settingTypeText,
 			},
@@ -76,13 +125,62 @@ func (s settingsModel) Init() tea.Cmd {
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// Update
+// ---------------------------------------------------------------------------
+
 func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.settings.editing {
+	switch {
+	case m.settings.templateSelect:
+		return m.updateTemplateSelect(msg)
+	case m.settings.editing:
 		return m.updateSettingsEditing(msg)
+	default:
+		return m.updateSettingsNav(msg)
 	}
-	return m.updateSettingsNav(msg)
 }
 
+// Режим выбора пресета шаблона.
+func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.settings.templateSelect = false
+			return m, nil
+
+		case tea.KeyUp:
+			if m.settings.templateCursor > 0 {
+				m.settings.templateCursor--
+			}
+			return m, nil
+
+		case tea.KeyDown:
+			if m.settings.templateCursor < len(templatePresets)-1 {
+				m.settings.templateCursor++
+			}
+			return m, nil
+
+		case tea.KeyEnter, tea.KeySpace:
+			preset := templatePresets[m.settings.templateCursor]
+			if preset.label == "Свой формат…" {
+				// Переходим в ручной ввод
+				m.settings.templateSelect = false
+				m.settings.editing = true
+				m.settings.input.SetValue(m.settings.items[m.settings.cursor].value.(string))
+				m.settings.input.Focus()
+				return m, textinput.Blink
+			}
+			// Выбрали готовый пресет
+			m.settings.items[m.settings.cursor].value = preset.value
+			m.settings.templateSelect = false
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// Режим ручного ввода (custom) через textinput.
 func (m Model) updateSettingsEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -90,8 +188,6 @@ func (m Model) updateSettingsEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			m.settings.editing = false
 			m.settings.input.Blur()
-			// сохраняем значение
-			m.settings.items[m.settings.cursor].value = m.settings.input.Value()
 			return m, nil
 
 		case tea.KeyEnter:
@@ -107,6 +203,7 @@ func (m Model) updateSettingsEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// Обычная навигация по списку настроек.
 func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -134,10 +231,11 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case settingTypeBool:
 				item.value = !item.value.(bool)
 			case settingTypeText:
-				m.settings.editing = true
-				m.settings.input.SetValue(item.value.(string))
-				m.settings.input.Focus()
-				return m, textinput.Blink
+				// Открываем выбор пресета
+				m.settings.templateSelect = true
+				idx, _ := findPreset(item.value.(string))
+				m.settings.templateCursor = idx
+				return m, nil
 			}
 			return m, nil
 
@@ -154,6 +252,10 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// ---------------------------------------------------------------------------
+// View
+// ---------------------------------------------------------------------------
+
 func (m Model) viewSettings() string {
 	var b strings.Builder
 
@@ -169,7 +271,16 @@ func (m Model) viewSettings() string {
 	b.WriteString(m.Target + "\n")
 	b.WriteString("\n")
 
+	// Если выбираем пресет шаблона — рисуем модальный список поверх
+	if m.settings.templateSelect {
+		b.WriteString(m.viewTemplateSelect())
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
+		return b.String()
+	}
+
 	// Список настроек
+	labelWidth := 28
 	for i, item := range m.settings.items {
 		cursor := "  "
 		if m.settings.cursor == i {
@@ -188,13 +299,17 @@ func (m Model) viewSettings() string {
 			if m.settings.editing && m.settings.cursor == i {
 				valueStr = m.settings.input.View()
 			} else {
-				valueStr = highlightStyle.Render(item.value.(string))
+				valueStr = highlightStyle.Render(formatTemplateDisplay(item.value.(string)))
 			}
 		}
 
-		b.WriteString(fmt.Sprintf("%s%-25s %s\n", cursor, item.label+":", valueStr))
+		labelCol := lipgloss.NewStyle().Width(labelWidth).Render(cursor + item.label + ":")
+		line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, valueStr)
+		b.WriteString(line + "\n")
+
 		if m.settings.cursor == i && !m.settings.editing {
-			b.WriteString(helpStyle.Render(fmt.Sprintf("     %s\n", item.help)))
+			helpLine := helpStyle.Render("  " + item.help)
+			b.WriteString(helpLine + "\n")
 		}
 	}
 
@@ -208,6 +323,37 @@ func (m Model) viewSettings() string {
 
 	return b.String()
 }
+
+// viewTemplateSelect рисует список пресетов шаблонов.
+func (m Model) viewTemplateSelect() string {
+	var b strings.Builder
+
+	b.WriteString(highlightStyle.Render("Выберите формат папок:"))
+	b.WriteString("\n\n")
+
+	labelWidth := 16
+	for i, preset := range templatePresets {
+		cursor := "  "
+		if m.settings.templateCursor == i {
+			cursor = highlightStyle.Render("▸ ")
+		}
+
+		if preset.label == "Свой формат…" {
+			b.WriteString(cursor + preset.label + "\n")
+		} else {
+			example := time.Now().Format(preset.value)
+			labelCol := lipgloss.NewStyle().Width(labelWidth).Render(cursor + preset.label)
+			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+example)
+			b.WriteString(line + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 // GetSettingBool возвращает значение boolean-настройки по ключу.
 func (m Model) GetSettingBool(key string) bool {
