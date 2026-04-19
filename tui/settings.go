@@ -222,6 +222,15 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settings.cursor++
 			}
 			return m, nil
+
+		case tea.KeyLeft:
+			m.screen = ScreenTarget
+			return m, nil
+
+		case tea.KeyRight:
+			m.screen = ScreenScan
+			m.scan = newScanModel()
+			return m, m.scan.Init()
 		}
 
 		switch msg.String() {
@@ -239,13 +248,6 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case "b":
-			m.screen = ScreenTarget
-			return m, nil
-
-		case "n":
-			m.screen = ScreenScan
-			return m, nil
 		}
 	}
 
@@ -318,7 +320,7 @@ func (m Model) viewSettings() string {
 	if m.settings.editing {
 		b.WriteString(helpStyle.Render("enter — сохранить • esc — отменить"))
 	} else {
-		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter/пробел — изменить • b — назад • n — продолжить • esc — выход"))
+		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter/пробел — изменить • ← — назад • → — продолжить • esc — выход"))
 	}
 
 	return b.String()

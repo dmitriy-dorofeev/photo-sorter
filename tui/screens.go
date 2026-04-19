@@ -2,19 +2,6 @@ package tui
 
 import "strings"
 
-func (m Model) viewScan() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render(" photo-sorter "))
-	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 4. Сканирование файлов"))
-	b.WriteString("\n\n")
-	b.WriteString("[                    ] 0%\n")
-	b.WriteString("Найдено файлов: 0\n")
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("esc — отмена"))
-	return b.String()
-}
-
 func (m Model) viewPreview() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render(" photo-sorter "))

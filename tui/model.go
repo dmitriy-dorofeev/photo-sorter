@@ -28,6 +28,7 @@ type Model struct {
 	sources  sourcesModel
 	target   targetModel
 	settings settingsModel
+	scan     scanModel
 }
 
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
@@ -37,6 +38,7 @@ func NewModel() Model {
 		sources:  newSourcesModel(),
 		target:   newTargetModel(),
 		settings: newSettingsModel(),
+		scan:     newScanModel(),
 	}
 }
 
@@ -53,8 +55,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenSettings:
 		return m.updateSettings(msg)
 	case ScreenScan:
-		// TODO: экран сканирования
-		return m, nil
+		return m.updateScan(msg)
 	case ScreenPreview:
 		// TODO: экран предпросмотра
 		return m, nil

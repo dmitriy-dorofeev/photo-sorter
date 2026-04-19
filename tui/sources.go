@@ -107,7 +107,7 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
-		case tea.KeyEnter, tea.KeyRight:
+		case tea.KeyEnter:
 			if len(m.sources.items) == 0 {
 				return m, nil
 			}
@@ -117,12 +117,21 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sources.cursor = 0
 			return m, nil
 
-		case tea.KeyBackspace, tea.KeyLeft:
+		case tea.KeyBackspace:
 			parent := filepath.Dir(filepath.Clean(m.sources.currentDir))
 			if parent != m.sources.currentDir {
 				m.sources.currentDir = parent
 				m.sources.items = loadDirItems(parent)
 				m.sources.cursor = 0
+			}
+			return m, nil
+
+		case tea.KeyRight:
+			if m.Source != "" {
+				m.screen = ScreenTarget
+				m.target.currentDir = m.sources.currentDir
+				m.target.items = loadDirItems(m.target.currentDir)
+				m.target.cursor = 0
 			}
 			return m, nil
 		}
@@ -139,14 +148,6 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Source = filepath.Clean(item.path)
 			return m, nil
 
-		case "n": // дальше — выбор целевой папки
-			if m.Source != "" {
-				m.screen = ScreenTarget
-				m.target.currentDir = m.sources.currentDir
-				m.target.items = loadDirItems(m.target.currentDir)
-				m.target.cursor = 0
-			}
-			return m, nil
 		}
 	}
 
@@ -197,13 +198,13 @@ func (m Model) viewSources() string {
 
 	b.WriteString("\n")
 
-	nextHint := helpStyle.Render("n — продолжить »")
+	nextHint := helpStyle.Render("→ — продолжить »")
 	if m.Source == "" {
-		nextHint = helpStyle.Render("n — продолжить (выберите источник)")
+		nextHint = helpStyle.Render("→ — продолжить (выберите источник)")
 	}
 
 	b.WriteString(helpStyle.Render(
-		"↑/↓ — выбрать • enter — открыть • ←/backspace — назад • пробел — выбрать источник • esc — выход",
+		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел — выбрать источник • → — продолжить • esc — выход",
 	))
 	b.WriteString("\n")
 	b.WriteString(nextHint)
