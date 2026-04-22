@@ -3,8 +3,8 @@
 package dateresolver
 
 import (
-	"path/filepath"
 	"photo-sorter/internal/scanner"
+	"strings"
 	"time"
 )
 
@@ -17,12 +17,35 @@ func New() *Resolver {
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.
-// TODO: добавить чтение EXIF и парсинг имён файлов.
+// Приоритет:
+//  1. EXIF (DateTimeOriginal / DateTime) для JPEG.
+//  2. Парсинг имени файла по известным паттернам.
+//  3. ModTime файла.
+//
+// Если дата не определена ни одним способом — возвращает (_, false).
 func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
-	// 1. Попытка извлечь дату из EXIF или видео-метаданных.
-	// 2. Попытка распарсить имя файла по известным паттернам.
+	// 1. EXIF для JPEG.
+	if isJPEG(f.Ext) {
+		if t, ok := extractExifDate(f.Path); ok {
+			return t, true
+		}
+	}
+
+	// 2. Парсинг имени файла.
+	if t, ok := parseFromFilename(f.Name); ok {
+		return t, true
+	}
+
 	// 3. Fallback на ModTime.
-	_ = f.Name // временно, чтобы компилятор не ругался
-	_ = filepath.Ext(f.Name)
-	return f.ModTime, true
+	if !f.ModTime.IsZero() {
+		return f.ModTime, true
+	}
+
+	return time.Time{}, false
+}
+
+// isJPEG возвращает true для расширений .jpg и .jpeg (любой регистр).
+func isJPEG(ext string) bool {
+	e := strings.ToLower(ext)
+	return e == ".jpg" || e == ".jpeg"
 }

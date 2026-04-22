@@ -84,6 +84,11 @@ photo-sorter/
 
 Если не матчится — fallback на `mtime`.
 
+> **Реализовано** в `internal/dateresolver/`:
+> - `exif.go` — чтение EXIF через `goexif`
+> - `filename.go` — реестр из 8 парсеров имени файла
+> - `dateresolver.go` — приоритет: EXIF → имя → `mtime` → `unsorted`
+
 ### 1.3. Edge case: одинаковые имена из разных устройств
 
 Если в целевой папке файл уже существует:

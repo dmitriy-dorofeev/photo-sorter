@@ -6,6 +6,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd
 )
 
 require (
