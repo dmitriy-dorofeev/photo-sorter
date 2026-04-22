@@ -8,9 +8,9 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
-// hashFile вычисляет xxhash для содержимого файла.
+// HashFile вычисляет xxhash для содержимого файла.
 // Чтение потоковое — подходит для файлов любого размера.
-func hashFile(path string) (uint64, error) {
+func HashFile(path string) (uint64, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, err

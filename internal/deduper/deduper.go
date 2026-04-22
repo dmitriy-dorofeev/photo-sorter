@@ -58,7 +58,7 @@ func (d *Deduper) FindDuplicates() []Result {
 		// 3. Вычисляем хеш для каждого файла в группе.
 		var hashed []fileHash
 		for _, f := range group {
-			h, err := hashFile(f.Path)
+			h, err := HashFile(f.Path)
 			if err != nil {
 				// Файл недоступен для чтения — пропускаем.
 				continue
