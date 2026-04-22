@@ -230,7 +230,8 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyRight:
 			m.screen = ScreenScan
 			m.scan = newScanModel()
-			return m, m.scan.Init()
+			m.scan.running = true
+			return m, tea.Batch(scanTickCmd(), m.startScan())
 		}
 
 		switch msg.String() {

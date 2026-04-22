@@ -1,7 +1,12 @@
 package tui
 
 import (
+	"context"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/scanner"
+	"photo-sorter/internal/sorter"
 )
 
 // Screen описывает текущий экран приложения.
@@ -29,6 +34,15 @@ type Model struct {
 	target   targetModel
 	settings settingsModel
 	scan     scanModel
+	copy     copyModel
+
+	// Результаты сканирования
+	files      []scanner.FileInfo
+	duplicates []deduper.Result
+	entries    []sorter.Entry
+
+	// Копирование
+	copyCancel context.CancelFunc
 }
 
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
@@ -39,6 +53,7 @@ func NewModel() Model {
 		target:   newTargetModel(),
 		settings: newSettingsModel(),
 		scan:     newScanModel(),
+		copy:     newCopyModel(),
 	}
 }
 
@@ -57,11 +72,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenScan:
 		return m.updateScan(msg)
 	case ScreenPreview:
-		// TODO: экран предпросмотра
-		return m, nil
+		return m.updatePreview(msg)
 	case ScreenCopy:
-		// TODO: экран выполнения
-		return m, nil
+		return m.updateCopy(msg)
 	}
 	return m, nil
 }
@@ -82,4 +95,19 @@ func (m Model) View() string {
 		return m.viewCopy()
 	}
 	return ""
+}
+
+func (m Model) resetToSources() (tea.Model, tea.Cmd) {
+	m.screen = ScreenSources
+	m.Source = ""
+	m.Target = ""
+	m.files = nil
+	m.duplicates = nil
+	m.entries = nil
+	m.sources = newSourcesModel()
+	m.target = newTargetModel()
+	m.settings = newSettingsModel()
+	m.scan = newScanModel()
+	m.copy = newCopyModel()
+	return m, nil
 }
