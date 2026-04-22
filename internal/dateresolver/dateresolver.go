@@ -9,18 +9,22 @@ import (
 )
 
 // Resolver определяет дату для файла.
-type Resolver struct{}
+type Resolver struct {
+	// UseModTime разрешает fallback на ModTime, если EXIF и имя файла
+	// не содержат дату. По умолчанию false — файлы без даты идут в unsorted.
+	UseModTime bool
+}
 
-// New создаёт новый Resolver.
+// New создаёт новый Resolver с UseModTime=false.
 func New() *Resolver {
-	return &Resolver{}
+	return &Resolver{UseModTime: false}
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.
 // Приоритет:
 //  1. EXIF (DateTimeOriginal / DateTime) для JPEG.
 //  2. Парсинг имени файла по известным паттернам.
-//  3. ModTime файла.
+//  3. ModTime файла (только если UseModTime == true).
 //
 // Если дата не определена ни одним способом — возвращает (_, false).
 func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
@@ -36,8 +40,8 @@ func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
 		return t, true
 	}
 
-	// 3. Fallback на ModTime.
-	if !f.ModTime.IsZero() {
+	// 3. Fallback на ModTime (опционально).
+	if r.UseModTime && !f.ModTime.IsZero() {
 		return f.ModTime, true
 	}
 

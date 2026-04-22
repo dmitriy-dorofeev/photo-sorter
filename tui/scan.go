@@ -90,6 +90,7 @@ func (m Model) startScan() tea.Cmd {
 
 		// 3. Sorter with date resolver
 		dr := dateresolver.New()
+		dr.UseModTime = m.GetSettingBool("use_mtime")
 		sort := sorter.New(m.Target, layout)
 		entries := sort.BuildTree(files, duplicates, dr.Resolve)
 

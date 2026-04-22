@@ -166,8 +166,9 @@ func TestResolve_Priority(t *testing.T) {
 		}
 	})
 
-	t.Run("mtime fallback", func(t *testing.T) {
+	t.Run("mtime fallback when enabled", func(t *testing.T) {
 		r := New()
+		r.UseModTime = true
 		f := scanner.FileInfo{
 			Path:    "/tmp/unknown.jpg",
 			Name:    "unknown.jpg",
@@ -181,6 +182,21 @@ func TestResolve_Priority(t *testing.T) {
 		}
 		if !got.Equal(fallback) {
 			t.Fatalf("Resolve() = %v, want %v (mtime)", got, fallback)
+		}
+	})
+
+	t.Run("mtime fallback disabled by default", func(t *testing.T) {
+		r := New() // UseModTime = false по умолчанию
+		f := scanner.FileInfo{
+			Path:    "/tmp/unknown.jpg",
+			Name:    "unknown.jpg",
+			ModTime: fallback,
+			Ext:     ".jpg",
+		}
+
+		_, ok := r.Resolve(f)
+		if ok {
+			t.Fatal("expected false when UseModTime is false and no EXIF/filename date")
 		}
 	})
 
