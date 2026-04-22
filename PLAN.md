@@ -49,7 +49,7 @@ photo-sorter/
 
 - **`scanner`** — рекурсивный `filepath.WalkDir`, сбор метаданных (путь, размер, расширение, mtime).
 - **`dateresolver`** — структура готова, но пока только fallback на `mtime`. EXIF и парсинг имён — TODO.
-- **`deduper`** — структура готова, но пока возвращает `nil` (нет дублей). Хеширование — TODO.
+- **`deduper`** — двухуровневый детектор дубликатов (размер → `xxhash`). Фильтрация Live Photos. Unit-тесты готовы.
 - **`sorter`** — базовое построение дерева: дата → `targetRoot/layout/name`. Коллизии и Live Photos — TODO.
 - **`copier`** — базовое копирование через `io.Copy`, поддержка `dry-run`. Коллизии и отмена — TODO.
 - **`logger`** — запись в файл с timestamp.
