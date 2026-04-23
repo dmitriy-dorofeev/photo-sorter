@@ -122,10 +122,10 @@ go build -o photo-sorter cmd/main.go
 
 ---
 
-## Шаг 6. Финал (3–5 дней)
+## ✅ Шаг 6. Финал (готово)
 
-- [ ] Собрать финальный бинарник: `go build -o photo-sorter cmd/main.go`.
-- [ ] Дописать `README.md` и `PLAN.md`.
+- [x] Собрать финальный бинарник: `go build -o photo-sorter cmd/main.go`.
+- [x] Дописать `README.md` и `PLAN.md`.
 - [ ] Сделать первый запуск на реальных данных:
   1. Подключить внешний диск.
   2. Запустить `dry-run`.
