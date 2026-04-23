@@ -41,6 +41,7 @@ type jsonReport struct {
 	Skipped         int            `json:"skipped"`
 	Errors          int            `json:"errors"`
 	BytesCopied     int64          `json:"bytes_copied"`
+	ErrorList       []string       `json:"error_list,omitempty"`
 	DuplicateGroups []jsonDupGroup `json:"duplicate_groups"`
 	UnsortedFiles   []string       `json:"unsorted_files"`
 }
@@ -192,6 +193,13 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 	if stats.BytesCopied > 0 {
 		fmt.Printf("Байт:         %d\n", stats.BytesCopied)
 	}
+	if len(stats.ErrorList) > 0 {
+		fmt.Println()
+		fmt.Println("Ошибки:")
+		for _, e := range stats.ErrorList {
+			fmt.Printf("  %s\n", e)
+		}
+	}
 
 	if len(res.Duplicates) > 0 {
 		fmt.Println()
@@ -250,6 +258,7 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 		Skipped:         stats.Skipped,
 		Errors:          stats.Errors,
 		BytesCopied:     stats.BytesCopied,
+		ErrorList:       stats.ErrorList,
 		DuplicateGroups: dupGroups,
 		UnsortedFiles:   unsortedFiles,
 	}

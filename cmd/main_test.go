@@ -36,7 +36,7 @@ func TestCLIHelp(t *testing.T) {
 }
 
 func TestCLIDryRun(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cmd := exec.Command("go", "run", ".",
@@ -65,7 +65,7 @@ func TestCLIDryRun(t *testing.T) {
 }
 
 func TestCLIJSON(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cmd := exec.Command("go", "run", ".",
@@ -99,7 +99,7 @@ func TestCLIJSON(t *testing.T) {
 }
 
 func TestCLIMultiSource(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cmd := exec.Command("go", "run", ".",

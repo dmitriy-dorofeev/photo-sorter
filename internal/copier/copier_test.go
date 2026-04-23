@@ -157,3 +157,56 @@ func TestCopy_Progress(t *testing.T) {
 		t.Errorf("last progress = %d, want 1", calls[len(calls)-1])
 	}
 }
+
+func TestCopy_ErrorList(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	c := New(false, dstDir)
+	// Три записи с несуществующими исходными файлами.
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "missing1.jpg"), Name: "missing1.jpg", Size: 1}, Target: filepath.Join(dstDir, "missing1.jpg")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "missing2.jpg"), Name: "missing2.jpg", Size: 1}, Target: filepath.Join(dstDir, "missing2.jpg")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "missing3.jpg"), Name: "missing3.jpg", Size: 1}, Target: filepath.Join(dstDir, "missing3.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Errors != 3 {
+		t.Errorf("expected 3 errors, got %d", stats.Errors)
+	}
+	if len(stats.ErrorList) != 3 {
+		t.Errorf("expected 3 error entries, got %d", len(stats.ErrorList))
+	}
+}
+
+func TestCopy_AbortOnMissingTarget(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := filepath.Join(t.TempDir(), "target")
+	os.MkdirAll(dstDir, 0755)
+	os.WriteFile(filepath.Join(srcDir, "a.jpg"), []byte("x"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "b.jpg"), []byte("y"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "c.jpg"), []byte("z"), 0644)
+
+	c := New(false, dstDir)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.jpg"), Name: "a.jpg", Size: 1}, Target: filepath.Join(dstDir, "a.jpg")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "b.jpg"), Name: "b.jpg", Size: 1}, Target: filepath.Join(dstDir, "b.jpg")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "c.jpg"), Name: "c.jpg", Size: 1}, Target: filepath.Join(dstDir, "c.jpg")},
+	}
+
+	// Превращаем целевую директорию в обычный файл, чтобы os.MkdirAll падал.
+	os.RemoveAll(dstDir)
+	os.WriteFile(dstDir, []byte("not a dir"), 0644)
+
+	_, err := c.Copy(context.Background(), entries, nil)
+	if err == nil {
+		t.Fatal("expected error when target is not a directory")
+	}
+	want := "target disk unavailable after 3 consecutive errors"
+	if err.Error() != want {
+		t.Fatalf("unexpected error: %v (want %s)", err, want)
+	}
+}

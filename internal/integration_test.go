@@ -16,7 +16,7 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	// 1. Scan (include .png for filename-date test)
@@ -193,7 +193,7 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestEndToEnd_UseModTime(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
@@ -212,16 +212,16 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 		okMap[f.Path] = ok
 	}
 
-	// live_photo.MOV should now resolve via ModTime (we touched it to 2020-01-01)
-	if !okMap[filepath.Join(sourceDir, "2023", "live_photo.MOV")] {
+	// live_photo.MOV should now resolve via ModTime
+	if !okMap[filepath.Join(sourceDir, "live_photo.MOV")] {
 		t.Errorf("live_photo.MOV: expected ModTime fallback when UseModTime=true")
 	}
 	// video.mp4 should also resolve via ModTime
-	if !okMap[filepath.Join(sourceDir, "2023", "video.mp4")] {
+	if !okMap[filepath.Join(sourceDir, "video.mp4")] {
 		t.Errorf("video.mp4: expected ModTime fallback when UseModTime=true")
 	}
 	// live_photo.HEIC also has no EXIF/filename date, should get ModTime
-	if !okMap[filepath.Join(sourceDir, "2023", "live_photo.HEIC")] {
+	if !okMap[filepath.Join(sourceDir, "live_photo.HEIC")] {
 		t.Errorf("live_photo.HEIC: expected ModTime fallback when UseModTime=true")
 	}
 
@@ -252,8 +252,163 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 	}
 }
 
+func TestEndToEnd_ExtendedPatterns(t *testing.T) {
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2024")
+	targetDir := t.TempDir()
+
+	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".png", ".mp4")
+	files, err := sc.Scan()
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if len(files) != 9 {
+		t.Fatalf("expected 9 files in 2024/, got %d", len(files))
+	}
+
+	resolver := dateresolver.New()
+	dateMap := make(map[string]time.Time)
+	okMap := make(map[string]bool)
+	for _, f := range files {
+		d, ok := resolver.Resolve(f)
+		dateMap[f.Path] = d
+		okMap[f.Path] = ok
+	}
+
+	expectedDates := map[string]string{
+		"IMG_20240115_143022.jpg":            "2024-01-15",
+		"VID_20240120_120000.mp4":            "2024-01-20",
+		"Screenshot 2024-02-10 at 12.30.45.png": "2024-02-10",
+		"signal-2024-04-01-14-30-22.jpg":     "2024-04-01",
+		"IMG-20240315-WA0001.jpg":            "2024-03-15",
+		"PXL_20240501_143022123.jpg":         "2024-05-01",
+		"20240315_143022.jpg":                "2024-03-15",
+		"2024-03-15 14.30.22.jpg":            "2024-03-15",
+	}
+
+	for name, wantDate := range expectedDates {
+		found := false
+		for _, f := range files {
+			if filepath.Base(f.Path) == name {
+				found = true
+				if !okMap[f.Path] {
+					t.Errorf("%s: expected date, got none", name)
+					continue
+				}
+				got := dateMap[f.Path].Format("2006-01-02")
+				if got != wantDate {
+					t.Errorf("%s: expected %s, got %s", name, wantDate, got)
+				}
+			}
+		}
+		if !found {
+			t.Errorf("%s: file not found in scan results", name)
+		}
+	}
+
+	// DSC_1234.png has no date pattern and no EXIF
+	for _, f := range files {
+		if filepath.Base(f.Path) == "DSC_1234.png" {
+			if okMap[f.Path] {
+				t.Errorf("DSC_1234.png: expected no date, got %v", dateMap[f.Path])
+			}
+		}
+	}
+
+	// Build tree and verify targets
+	ded := deduper.New(files, true)
+	dupResults := ded.FindDuplicates()
+	sort := sorter.New(targetDir, "2006/01/02", true)
+	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+
+	unsortedCount := 0
+	for _, e := range entries {
+		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+			unsortedCount++
+		}
+	}
+	if unsortedCount != 1 {
+		t.Errorf("expected 1 unsorted (DSC_1234.png), got %d", unsortedCount)
+	}
+
+	// Copy and verify
+	c := copier.New(false, targetDir)
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+}
+
+func TestEndToEnd_VideoExifTool(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping exiftool integration test in short mode")
+	}
+
+	srcDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Create a fake video file with a parseable name to verify exiftool beats filename.
+	movPath := filepath.Join(srcDir, "VID_20240120_120000.mov")
+	os.WriteFile(movPath, []byte("fake video"), 0644)
+
+	// Create fake exiftool that returns a different date.
+	script := `#!/bin/sh
+echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
+`
+	fakeExifTool := filepath.Join(t.TempDir(), "fake_exiftool.sh")
+	os.WriteFile(fakeExifTool, []byte(script), 0755)
+
+	sc := scanner.New([]string{srcDir}, ".mov")
+	files, err := sc.Scan()
+	if err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+
+	resolver := dateresolver.New()
+	resolver.ExifToolPath = fakeExifTool
+
+	d, ok := resolver.Resolve(files[0])
+	if !ok {
+		t.Fatal("expected date from exiftool")
+	}
+	want := time.Date(2023, 7, 7, 7, 7, 7, 0, time.UTC)
+	if !d.Equal(want) {
+		t.Fatalf("expected %v, got %v (exiftool should beat filename)", want, d)
+	}
+
+	// Verify tree uses exiftool date
+	ded := deduper.New(files, true)
+	dupResults := ded.FindDuplicates()
+	sort := sorter.New(targetDir, "2006/01/02", true)
+	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if strings.Contains(entries[0].Target, "unsorted") {
+		t.Errorf("expected dated target, got unsorted: %s", entries[0].Target)
+	}
+	if !strings.Contains(entries[0].Target, "2023/07/07") {
+		t.Errorf("expected target in 2023/07/07, got %s", entries[0].Target)
+	}
+
+	c := copier.New(false, targetDir)
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+}
+
 func TestCancellation(t *testing.T) {
-	sourceDir := filepath.Join("..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")

@@ -13,6 +13,9 @@ type Resolver struct {
 	// UseModTime разрешает fallback на ModTime, если EXIF и имя файла
 	// не содержат дату. По умолчанию false — файлы без даты идут в unsorted.
 	UseModTime bool
+	// ExifToolPath — путь к бинарнику exiftool (по умолчанию "exiftool").
+	// Используется для извлечения метаданных из видео.
+	ExifToolPath string
 }
 
 // New создаёт новый Resolver с UseModTime=false.
@@ -23,8 +26,9 @@ func New() *Resolver {
 // Resolve возвращает наилучшую возможную дату для файла.
 // Приоритет:
 //  1. EXIF (DateTimeOriginal / DateTime) для JPEG.
-//  2. Парсинг имени файла по известным паттернам.
-//  3. ModTime файла (только если UseModTime == true).
+//  2. Видео-метаданные через exiftool (для .mov/.mp4/.avi/.mkv).
+//  3. Парсинг имени файла по известным паттернам.
+//  4. ModTime файла (только если UseModTime == true).
 //
 // Если дата не определена ни одним способом — возвращает (_, false).
 func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
@@ -35,12 +39,19 @@ func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
 		}
 	}
 
-	// 2. Парсинг имени файла.
+	// 2. Видео-метаданные через exiftool.
+	if isVideo(f.Ext) {
+		if t, ok := extractVideoDate(f.Path, r.ExifToolPath); ok {
+			return t, true
+		}
+	}
+
+	// 3. Парсинг имени файла.
 	if t, ok := parseFromFilename(f.Name); ok {
 		return t, true
 	}
 
-	// 3. Fallback на ModTime (опционально).
+	// 4. Fallback на ModTime (опционально).
 	if r.UseModTime && !f.ModTime.IsZero() {
 		return f.ModTime, true
 	}

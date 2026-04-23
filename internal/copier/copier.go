@@ -20,6 +20,7 @@ type Stats struct {
 	Skipped     int
 	Errors      int
 	BytesCopied int64
+	ErrorList   []string // до 10 первых ошибок для отчёта
 }
 
 // Copier выполняет копирование файлов.
@@ -43,6 +44,7 @@ func (c *Copier) Copy(
 ) (Stats, error) {
 	var stats Stats
 	total := len(entries)
+	consecutiveErrors := 0
 
 	if !c.dryRun && c.targetRoot != "" && total > 0 {
 		if err := c.checkDiskSpace(entries); err != nil {
@@ -66,16 +68,22 @@ func (c *Copier) Copy(
 
 		if e.Skip {
 			stats.Skipped++
+			consecutiveErrors = 0
 			continue
 		}
 
 		if c.dryRun {
 			stats.Copied++
+			consecutiveErrors = 0
 			continue
 		}
 
 		if err := os.MkdirAll(filepath.Dir(e.Target), 0755); err != nil {
 			stats.Errors++
+			c.recordError(&stats, err)
+			if c.shouldAbort(&consecutiveErrors) {
+				return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+			}
 			continue
 		}
 
@@ -86,6 +94,7 @@ func (c *Copier) Copy(
 			hDst, err2 := deduper.HashFile(target)
 			if err1 == nil && err2 == nil && hSrc == hDst {
 				stats.Skipped++
+				consecutiveErrors = 0
 				continue
 			}
 			target = findFreeName(target)
@@ -93,16 +102,49 @@ func (c *Copier) Copy(
 
 		if err := copyFile(e.Source.Path, target); err != nil {
 			stats.Errors++
+			c.recordError(&stats, err)
+			if c.shouldAbort(&consecutiveErrors) {
+				return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+			}
 			continue
 		}
 		stats.Copied++
 		stats.BytesCopied += e.Source.Size
+		consecutiveErrors = 0
 	}
 
 	if progress != nil {
 		progress(total, total)
 	}
 	return stats, nil
+}
+
+// recordError добавляет ошибку в ErrorList (максимум 10 записей).
+func (c *Copier) recordError(stats *Stats, err error) {
+	if len(stats.ErrorList) < 10 {
+		stats.ErrorList = append(stats.ErrorList, err.Error())
+	}
+}
+
+// shouldAbort проверяет, не отключился ли целевой диск.
+// Возвращает true, если 3+ ошибок подряд и targetRoot недоступен
+// (не существует, нет прав, или не является директорией).
+func (c *Copier) shouldAbort(consecutiveErrors *int) bool {
+	*consecutiveErrors++
+	if *consecutiveErrors < 3 {
+		return false
+	}
+	if c.targetRoot == "" {
+		return false
+	}
+	info, err := os.Stat(c.targetRoot)
+	if os.IsNotExist(err) || os.IsPermission(err) {
+		return true
+	}
+	if err == nil && !info.IsDir() {
+		return true
+	}
+	return false
 }
 
 func (c *Copier) checkDiskSpace(entries []sorter.Entry) error {
@@ -129,7 +171,16 @@ func availableSpace(path string) (uint64, error) {
 	var stat unix.Statfs_t
 	err := unix.Statfs(path, &stat)
 	if err != nil {
-		return 0, err
+		// Если сам путь не существует, пробуем родительскую директорию.
+		if os.IsNotExist(err) {
+			parent := filepath.Dir(path)
+			if parent != path {
+				err = unix.Statfs(parent, &stat)
+			}
+		}
+		if err != nil {
+			return 0, err
+		}
 	}
 	return stat.Bavail * uint64(stat.Bsize), nil
 }

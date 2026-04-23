@@ -8,7 +8,7 @@ import (
 )
 
 func TestRun_EndToEnd(t *testing.T) {
-	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cfg := Config{
@@ -63,7 +63,7 @@ func TestRun_EndToEnd(t *testing.T) {
 }
 
 func TestRun_UseModTime(t *testing.T) {
-	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cfg := Config{
@@ -93,7 +93,7 @@ func TestRun_UseModTime(t *testing.T) {
 }
 
 func TestRun_Progress(t *testing.T) {
-	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
 	cfg := Config{

@@ -108,11 +108,17 @@ go build -o photo-sorter cmd/main.go
 
 ---
 
-## Шаг 5. Видео и обработка ошибок (3–5 дней)
+## ✅ Шаг 5. Видео и обработка ошибок (готово)
 
-- [ ] Добавить поддержку видео через `exiftool` (вызов внешнего процесса).
-- [ ] Обработка edge cases: недостаточно места, файл без прав на чтения, отключение диска.
-- [ ] Создать реалистичную `testdata/` с фейковыми файлами под разные паттерны.
+- [x] Добавить поддержку видео через `exiftool` (вызов внешнего процесса).
+  - `internal/dateresolver/video.go` — извлечение `DateTimeOriginal` / `CreateDate` / `MediaCreateDate`
+  - Graceful fallback: exiftool не найден → имя файла → mtime → unsorted
+  - Тестируемость через `Resolver.ExifToolPath`
+- [x] Обработка edge cases: недостаточно места, файл без прав на чтения, отключение диска.
+  - Copier: early abort после 3 ошибок подряд, если targetRoot недоступен
+  - `Stats.ErrorList` — до 10 ошибок для отчёта в CLI и лога в TUI
+- [x] Создать реалистичную `testdata/` с фейковыми файлами под разные паттерны.
+  - `testdata/e2e/source/2024/` — 9 файлов: Screenshot, Signal, WhatsApp, Pixel, IMG_, VID_, plain datetime, DSC_ (unknown)
 
 ---
 

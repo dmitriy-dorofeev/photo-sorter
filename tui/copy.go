@@ -133,8 +133,11 @@ func (m Model) logCopyResult() {
 	l.Log(fmt.Sprintf("Skipped (duplicates): %d", m.copy.stats.Skipped))
 	l.Log(fmt.Sprintf("Errors: %d", m.copy.stats.Errors))
 	l.Log(fmt.Sprintf("Bytes copied: %d", m.copy.stats.BytesCopied))
+	for _, e := range m.copy.stats.ErrorList {
+		l.Log(fmt.Sprintf("Error detail: %s", e))
+	}
 	if m.copy.errMsg != "" {
-		l.Log(fmt.Sprintf("Error: %s", m.copy.errMsg))
+		l.Log(fmt.Sprintf("Fatal error: %s", m.copy.errMsg))
 	}
 }
 
