@@ -14,7 +14,7 @@ func date(year, month, day int) time.Time {
 }
 
 func TestBuildTree_Basic(t *testing.T) {
-	s := New("/target", "2006/01/02")
+	s := New("/target", "2006/01/02", true)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
@@ -34,7 +34,7 @@ func TestBuildTree_Basic(t *testing.T) {
 }
 
 func TestBuildTree_Unsorted(t *testing.T) {
-	s := New("/target", "2006/01/02")
+	s := New("/target", "2006/01/02", true)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.bin", Name: "unknown.bin", Ext: ".bin"},
 	}
@@ -51,7 +51,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 }
 
 func TestBuildTree_SkipDuplicates(t *testing.T) {
-	s := New("/target", "2006/01/02")
+	s := New("/target", "2006/01/02", true)
 	files := []scanner.FileInfo{
 		{Path: "/src/original.jpg", Name: "original.jpg"},
 		{Path: "/src/dup.jpg", Name: "dup.jpg"},
@@ -81,7 +81,7 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 }
 
 func TestBuildTree_NameCollision(t *testing.T) {
-	s := New("/target", "2006/01/02")
+	s := New("/target", "2006/01/02", true)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg"},
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
@@ -104,7 +104,7 @@ func TestBuildTree_NameCollision(t *testing.T) {
 }
 
 func TestBuildTree_LivePhotos(t *testing.T) {
-	s := New("/target", "2006/01/02")
+	s := New("/target", "2006/01/02", true)
 	files := []scanner.FileInfo{
 		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
@@ -127,5 +127,34 @@ func TestBuildTree_LivePhotos(t *testing.T) {
 	}
 	if filepath.Dir(entries[1].Target) != want {
 		t.Errorf("MOV target dir = %q, want %q", filepath.Dir(entries[1].Target), want)
+	}
+}
+
+func TestBuildTree_LivePhotosDisabled(t *testing.T) {
+	s := New("/target", "2006/01/02", false)
+	files := []scanner.FileInfo{
+		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
+		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
+	}
+
+	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+		if f.Ext == ".heic" {
+			return date(2024, 5, 20), true
+		}
+		return time.Time{}, false // .MOV без даты
+	}
+
+	entries := s.BuildTree(files, nil, resolve)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	want := filepath.Join("/target", "2024", "05", "20")
+	if filepath.Dir(entries[0].Target) != want {
+		t.Errorf("HEIC target dir = %q, want %q", filepath.Dir(entries[0].Target), want)
+	}
+	// .MOV should go to unsorted because livePhotos is disabled
+	wantUnsorted := filepath.Join("/target", "unsorted", "IMG_1234.MOV")
+	if entries[1].Target != wantUnsorted {
+		t.Errorf("MOV target = %q, want %q", entries[1].Target, wantUnsorted)
 	}
 }

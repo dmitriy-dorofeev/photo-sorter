@@ -1,14 +1,15 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"photo-sorter/internal/dateresolver"
-	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
+	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/sorter"
 )
 
@@ -73,41 +74,28 @@ func (s scanModel) Init() tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m Model) startScan() tea.Cmd {
-	exts := m.scanExtensions()
-	layout := m.GetSettingString("template")
+	cfg := runner.Config{
+		Sources:      []string{m.Source},
+		Target:       m.Target,
+		Template:     m.GetSettingString("template"),
+		LivePhotos:   m.GetSettingBool("live_photos"),
+		IncludeVideo: m.GetSettingBool("include_video"),
+		DryRun:       m.GetSettingBool("dry_run"),
+		UseMTime:     m.GetSettingBool("use_mtime"),
+	}
 
 	return func() tea.Msg {
-		// 1. Scan
-		s := scanner.New([]string{m.Source}, exts...)
-		files, err := s.Scan()
+		res, err := runner.Run(context.Background(), cfg, nil)
 		if err != nil {
 			return scanResultMsg{err: err}
 		}
 
-		// 2. Deduper
-		d := deduper.New(files)
-		duplicates := d.FindDuplicates()
-
-		// 3. Sorter with date resolver
-		dr := dateresolver.New()
-		dr.UseModTime = m.GetSettingBool("use_mtime")
-		sort := sorter.New(m.Target, layout)
-		entries := sort.BuildTree(files, duplicates, dr.Resolve)
-
 		return scanResultMsg{
-			files:      files,
-			duplicates: duplicates,
-			entries:    entries,
+			files:      res.Files,
+			duplicates: res.Duplicates,
+			entries:    res.Entries,
 		}
 	}
-}
-
-func (m Model) scanExtensions() []string {
-	video := m.GetSettingBool("include_video")
-	if video {
-		return []string{".jpg", ".jpeg", ".png", ".heic", ".heif", ".mov", ".mp4", ".avi", ".mkv"}
-	}
-	return []string{".jpg", ".jpeg", ".png", ".heic", ".heif"}
 }
 
 // ---------------------------------------------------------------------------

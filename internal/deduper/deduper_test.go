@@ -103,6 +103,23 @@ func TestFindDuplicates(t *testing.T) {
 			wantLen: 0,
 		},
 		{
+			name: "live photos disabled treats as duplicates",
+			files: []scanner.FileInfo{
+				// Используем dup_a.bin и dup_b.bin (одинаковое содержимое), но с именами Live Photos
+				{Path: testdata("dup_a.bin"), Name: "live_photo.heic", Ext: ".heic", Size: 100},
+				{Path: testdata("dup_b.bin"), Name: "live_photo.mov", Ext: ".mov", Size: 100},
+			},
+			wantLen: 1,
+			check: func(t *testing.T, results []Result) {
+				if results[0].Original.Name != "live_photo.heic" {
+					t.Errorf("expected original live_photo.heic, got %s", results[0].Original.Name)
+				}
+				if len(results[0].Duplicates) != 1 || results[0].Duplicates[0].Name != "live_photo.mov" {
+					t.Errorf("expected duplicate live_photo.mov, got %v", results[0].Duplicates)
+				}
+			},
+		},
+		{
 			name: "live photos with duplicate heic",
 			files: []scanner.FileInfo{
 				{Path: testdata("live_photo.heic"), Name: "live_photo.heic", Ext: ".heic", Size: 50},
@@ -131,7 +148,11 @@ func TestFindDuplicates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := New(tt.files)
+			livePhotos := true
+			if tt.name == "live photos disabled treats as duplicates" {
+				livePhotos = false
+			}
+			d := New(tt.files, livePhotos)
 			got := d.FindDuplicates()
 			if len(got) != tt.wantLen {
 				t.Errorf("FindDuplicates() returned %d results, want %d", len(got), tt.wantLen)

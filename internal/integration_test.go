@@ -85,7 +85,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 3. Find duplicates
-	ded := deduper.New(files)
+	ded := deduper.New(files, true)
 	dupResults := ded.FindDuplicates()
 
 	// All minimal.jpg copies (7 files, 506 bytes) should form one duplicate group
@@ -114,7 +114,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 4. Build tree
-	sort := sorter.New(targetDir, "2006/01/02")
+	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
@@ -226,9 +226,9 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 	}
 
 	// Build tree: nothing should go to unsorted
-	ded := deduper.New(files)
+	ded := deduper.New(files, true)
 	dupResults := ded.FindDuplicates()
-	sort := sorter.New(targetDir, "2006/01/02")
+	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 
 	unsortedCount := 0
@@ -259,9 +259,9 @@ func TestCancellation(t *testing.T) {
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
 	files, _ := sc.Scan()
 	resolver := dateresolver.New()
-	ded := deduper.New(files)
+	ded := deduper.New(files, true)
 	dupResults := ded.FindDuplicates()
-	sort := sorter.New(targetDir, "2006/01/02")
+	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 
 	ctx, cancel := context.WithCancel(context.Background())

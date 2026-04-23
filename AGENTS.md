@@ -21,8 +21,12 @@
 ```
 photo-sorter/
 ├── cmd/
-│   └── main.go                    # Точка входа: парсинг флагов, запуск TUI
+│   ├── main.go                    # Точка входа: TUI или CLI
+│   └── main_test.go               # CLI-тесты (help, dry-run, json, validation)
 ├── internal/                      # Приватные пакеты (стандартный Go layout)
+│   ├── runner/
+│   │   ├── runner.go              # Единый pipeline scan → dedup → sort для TUI и CLI
+│   │   └── runner_test.go
 │   ├── scanner/
 │   │   ├── scanner.go             # Рекурсивный обход папок, фильтрация по расширениям
 │   │   └── scanner_test.go
@@ -81,6 +85,11 @@ go build -o photo-sorter cmd/main.go
 # Запуск в TUI-режиме (по умолчанию)
 ./photo-sorter
 
+# CLI-режим
+./photo-sorter --source ./photos --target ./sorted --dry-run
+./photo-sorter --source ./a --source ./b --target ./out --dry-run=false
+./photo-sorter --source ./photos --target ./sorted --format=json
+
 # Запуск тестов
 go test ./...
 
@@ -89,6 +98,7 @@ go test ./internal/dateresolver/
 
 # Запуск E2E-теста
 go test ./internal/ -run TestEndToEnd -v
+go test ./cmd/ -run TestCLI -v
 ```
 
 ### Навигация в TUI
@@ -177,7 +187,6 @@ go test ./internal/ -run TestCancellation -v
 
 ## Что ещё не реализовано (TODO)
 
-- **CLI-режим** — запуск с флагами `--source`, `--target`, `--dry-run` без TUI. В `cmd/main.go` есть заглушка.
 - **Видео-метаданные** — чтение дат из `.mov`/`.mp4` через внешний `exiftool`. Сейчас видео определяются только по имени файла или `mtime` (если включён).
 - **Расширенная обработка ошибок** — потеря диска во время копирования, файлы без прав на чтение.
 

@@ -17,12 +17,14 @@ type Result struct {
 
 // Deduper ищет дублирующиеся файлы.
 type Deduper struct {
-	files []scanner.FileInfo
+	files      []scanner.FileInfo
+	livePhotos bool
 }
 
 // New создаёт новый Deduper.
-func New(files []scanner.FileInfo) *Deduper {
-	return &Deduper{files: files}
+// livePhotos: если true, пары Live Photos (.HEIC + .MOV с одним basename) не считаются дубликатами.
+func New(files []scanner.FileInfo, livePhotos bool) *Deduper {
+	return &Deduper{files: files, livePhotos: livePhotos}
 }
 
 // FindDuplicates возвращает список групп дубликатов.
@@ -83,7 +85,7 @@ func (d *Deduper) FindDuplicates() []Result {
 
 			for i := 1; i < len(hashGroup); i++ {
 				candidate := hashGroup[i].info
-				if isLivePhotoPair(original, candidate) {
+				if d.livePhotos && isLivePhotoPair(original, candidate) {
 					continue
 				}
 				duplicates = append(duplicates, candidate)

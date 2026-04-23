@@ -70,7 +70,6 @@ func (c *Copier) Copy(
 		}
 
 		if c.dryRun {
-			fmt.Printf("[dry-run] %s -> %s\n", e.Source.Path, e.Target)
 			stats.Copied++
 			continue
 		}

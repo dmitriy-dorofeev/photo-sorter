@@ -23,13 +23,16 @@ type Entry struct {
 type Sorter struct {
 	targetRoot string
 	layout     string // например, "2006/01/02"
+	livePhotos bool
 }
 
 // New создаёт новый Sorter.
-func New(targetRoot, layout string) *Sorter {
+// livePhotos: если true, .MOV без даты получает дату от соответствующего .HEIC/.HEIF.
+func New(targetRoot, layout string, livePhotos bool) *Sorter {
 	return &Sorter{
 		targetRoot: targetRoot,
 		layout:     layout,
+		livePhotos: livePhotos,
 	}
 }
 
@@ -63,7 +66,7 @@ func (s *Sorter) BuildTree(
 	for _, f := range files {
 		d, ok := resolveDate(f)
 		dateCache[f.Path] = dateResult{date: d, ok: ok}
-		if ok {
+		if ok && s.livePhotos {
 			ext := strings.ToLower(f.Ext)
 			if ext == ".heic" || ext == ".heif" {
 				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
@@ -81,7 +84,7 @@ func (s *Sorter) BuildTree(
 		date, ok := res.date, res.ok
 
 		// Live Photos fallback для .MOV
-		if !ok {
+		if !ok && s.livePhotos {
 			ext := strings.ToLower(f.Ext)
 			if ext == ".mov" {
 				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))

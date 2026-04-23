@@ -62,12 +62,36 @@ go build -o photo-sorter cmd/main.go
 
 **Навигация:** `↑/↓` — курсор, `Enter` — открыть/подтвердить, `Backspace` — вверх по папкам, `←/→` — назад/вперёд по экранам, `Esc` — выход.
 
-### CLI-режим (в разработке)
+### CLI-режим
 
-В будущем будет доступен запуск из терминала с флагами:
+Запуск из терминала без интерактивного интерфейса:
+
 ```bash
-./photo-sorter --source ~/Photos/iPhone --source ~/Photos/Android --target /Volumes/ExternalDisk --dry-run
+# Пробный прогон (по умолчанию)
+./photo-sorter --source ~/Photos/iPhone --target /Volumes/ExternalDisk --dry-run
+
+# Несколько источников
+./photo-sorter --source ~/Photos/iPhone --source ~/Photos/Android --target /Volumes/ExternalDisk
+
+# Реальное копирование
+./photo-sorter --source ~/Photos --target ~/Sorted --dry-run=false
+
+# JSON-отчёт
+./photo-sorter --source ~/Photos --target ~/Sorted --format=json --dry-run
+
+# Полный список флагов
+./photo-sorter --help
 ```
+
+**Доступные флаги:**
+- `--source` — исходная папка (можно несколько)
+- `--target` — целевая папка
+- `--template` — шаблон папок (default: `2006/01/02`)
+- `--live-photos` — группировать Live Photos (default: `true`)
+- `--include-video` — обрабатывать видео (default: `true`)
+- `--dry-run` — пробный прогон (default: `true`)
+- `--use-mtime` — fallback на дату изменения (default: `false`)
+- `--format` — формат отчёта: `text` или `json` (default: `text`)
 
 ## Безопасность
 

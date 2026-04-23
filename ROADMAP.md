@@ -92,11 +92,19 @@ go build -o photo-sorter cmd/main.go
 
 ---
 
-## Шаг 4. CLI-режим (3–5 дней)
+## ✅ Шаг 4. CLI-режим (готово)
 
-- [ ] Реализовать запуск с флагами `--source`, `--target`, `--dry-run`.
-- [ ] Вывод текстового или JSON-отчёта.
-- [ ] Протестировать на папке `testdata/`.
+- [x] Реализовать запуск с флагами `--source`, `--target`, `--dry-run`.
+- [x] Поддержка repeatable `--source` для нескольких папок.
+- [x] Все настройки TUI доступны в CLI: `--template`, `--live-photos`, `--include-video`, `--use-mtime`.
+- [x] Вывод текстового или JSON-отчёта (`--format=text|json`).
+- [x] Удобный `--help` с примерами.
+- [x] Протестировать на папке `testdata/`.
+
+**Реализовано:**
+- `cmd/main.go` — полноценный CLI с stdlib `flag`, валидацией, красивым help.
+- `internal/runner/` — единый pipeline `Run(cfg Config)` для TUI и CLI (scan → dedup → sort).
+- Активирована настройка `live_photos` в `deduper` и `sorter` (раньше была заглушкой в TUI).
 
 ---
 

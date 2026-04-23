@@ -1,0 +1,123 @@
+package runner
+
+import (
+	"context"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestRun_EndToEnd(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	targetDir := t.TempDir()
+
+	cfg := Config{
+		Sources:      []string{sourceDir},
+		Target:       targetDir,
+		Template:     "2006/01/02",
+		LivePhotos:   true,
+		IncludeVideo: true,
+		UseMTime:     false,
+	}
+
+	res, err := Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(res.Files) != 12 {
+		t.Errorf("expected 12 files, got %d", len(res.Files))
+	}
+	if len(res.Entries) != 12 {
+		t.Errorf("expected 12 entries, got %d", len(res.Entries))
+	}
+
+	// Verify duplicates found (minimal.jpg copies)
+	var dupCount int
+	for _, g := range res.Duplicates {
+		dupCount += len(g.Duplicates)
+	}
+	if dupCount < 6 {
+		t.Errorf("expected at least 6 duplicates (minimal.jpg copies), got %d", dupCount)
+	}
+
+	// Verify live_photo files are NOT duplicates
+	for _, g := range res.Duplicates {
+		for _, d := range g.Duplicates {
+			if strings.Contains(d.Name, "live_photo") {
+				t.Errorf("live_photo file marked as duplicate: %s", d.Name)
+			}
+		}
+	}
+
+	// Verify unsorted count: live_photo.HEIC, live_photo.MOV, video.mp4 = 3
+	var unsortedCount int
+	for _, e := range res.Entries {
+		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+			unsortedCount++
+		}
+	}
+	if unsortedCount != 3 {
+		t.Errorf("expected 3 unsorted, got %d", unsortedCount)
+	}
+}
+
+func TestRun_UseModTime(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	targetDir := t.TempDir()
+
+	cfg := Config{
+		Sources:      []string{sourceDir},
+		Target:       targetDir,
+		Template:     "2006/01/02",
+		LivePhotos:   true,
+		IncludeVideo: true,
+		UseMTime:     true,
+	}
+
+	res, err := Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// With UseModTime=true, nothing should be unsorted
+	var unsortedCount int
+	for _, e := range res.Entries {
+		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+			unsortedCount++
+		}
+	}
+	if unsortedCount != 0 {
+		t.Errorf("expected 0 unsorted with UseModTime=true, got %d", unsortedCount)
+	}
+}
+
+func TestRun_Progress(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source")
+	targetDir := t.TempDir()
+
+	cfg := Config{
+		Sources:      []string{sourceDir},
+		Target:       targetDir,
+		Template:     "2006/01/02",
+		LivePhotos:   true,
+		IncludeVideo: true,
+	}
+
+	var stages []string
+	res, err := Run(context.Background(), cfg, func(stage string, current, total int) {
+		stages = append(stages, stage)
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(res.Files) == 0 {
+		t.Error("expected files")
+	}
+	if len(stages) != 3 {
+		t.Errorf("expected 3 progress stages, got %v", stages)
+	}
+	if stages[0] != "scan" || stages[1] != "dedup" || stages[2] != "sort" {
+		t.Errorf("unexpected stages: %v", stages)
+	}
+}
