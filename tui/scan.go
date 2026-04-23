@@ -7,9 +7,9 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
-	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/sorter"
 )
 
@@ -134,28 +134,24 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		if m.scan.done || m.scan.errMsg != "" {
-			switch msg.String() {
-			case "enter":
-				if m.scan.errMsg != "" {
-					m.scan = newScanModel()
-					m.scan.running = true
-					return m, tea.Batch(scanTickCmd(), m.startScan())
-				}
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
+			return m, tea.Quit
+		case tea.KeyLeft:
+			m.scan = newScanModel()
+			m.screen = ScreenSettings
+			return m, nil
+		}
+		switch msg.String() {
+		case "enter":
+			if m.scan.errMsg != "" {
+				m.scan = newScanModel()
+				m.scan.running = true
+				return m, tea.Batch(scanTickCmd(), m.startScan())
+			}
+			if m.scan.done {
 				m.screen = ScreenPreview
 				return m, nil
-			case "esc":
-				return m, tea.Quit
-			}
-		} else {
-			switch msg.Type {
-			case tea.KeyCtrlC, tea.KeyEsc:
-				return m, tea.Quit
-			case tea.KeyLeft:
-				if !m.scan.running {
-					m.screen = ScreenSettings
-					return m, nil
-				}
 			}
 		}
 	}
@@ -201,7 +197,7 @@ func (m Model) viewScan() string {
 		b.WriteString(fmt.Sprintf("Без даты (unsorted): %d\n", st.unsorted))
 		b.WriteString(fmt.Sprintf("Дубликатов: %d\n", st.duplicates))
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("enter — предпросмотр • esc — выход"))
+		b.WriteString(helpStyle.Render("enter — предпросмотр • ← — назад • esc — выход"))
 	} else if m.scan.running {
 		b.WriteString(helpStyle.Render("← — назад • esc — отмена"))
 	}
