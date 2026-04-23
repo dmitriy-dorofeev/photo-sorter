@@ -20,8 +20,8 @@ type templatePreset struct {
 }
 
 var templatePresets = []templatePreset{
-	{label: "YYYY/MM/DD", value: "2006/01/02"},
 	{label: "YYYY-MM-DD", value: "2006-01-02"},
+	{label: "YYYY/MM/DD", value: "2006/01/02"},
 	{label: "YYYY/MM", value: "2006/01"},
 	{label: "YYYY", value: "2006"},
 	{label: "Свой формат…", value: ""},
@@ -82,7 +82,7 @@ type settingsModel struct {
 
 func newSettingsModel() settingsModel {
 	ti := textinput.New()
-	ti.Placeholder = "2006/01/02"
+	ti.Placeholder = "2006-01-02"
 	ti.Width = 30
 
 	return settingsModel{
@@ -92,7 +92,7 @@ func newSettingsModel() settingsModel {
 				label: "Шаблон папок",
 				key:   "template",
 				help:  "Формат именования папок по дате",
-				value: "2006/01/02",
+				value: "2006-01-02",
 				stype: settingTypeText,
 			},
 			{
