@@ -45,14 +45,17 @@ go build -o photo-sorter cmd/main.go
 
 ## Запуск
 
-Приложение запускается в интерактивном TUI-режиме:
+Приложение работает в двух режимах: интерактивном **TUI** и консольном **CLI**.
+
+### TUI-режим (интерактивный)
+
+Просто запустите бинарник без аргументов:
 
 ```bash
 ./photo-sorter
 ```
 
-### Экраны TUI
-
+Откроется интерфейс с 6 экранами:
 1. **Выбор источника** — браузер папок. Выберите папку с фотографиями (`Пробел`), затем `→`.
 2. **Выбор цели** — выберите папку, куда скопировать отсортированные файлы.
 3. **Настройки** — шаблон папок (`YYYY/MM/DD` и др.), опции Live Photos, видео, dry-run.
@@ -62,29 +65,29 @@ go build -o photo-sorter cmd/main.go
 
 **Навигация:** `↑/↓` — курсор, `Enter` — открыть/подтвердить, `Backspace` — вверх по папкам, `←/→` — назад/вперёд по экранам, `Esc` — выход.
 
-### CLI-режим
+### CLI-режим (консольный)
 
-Запуск из терминала без интерактивного интерфейса:
+Для запуска из терминала без интерактивного интерфейса укажите `--source` и `--target`:
 
 ```bash
-# Пробный прогон (по умолчанию)
-./photo-sorter --source ~/Photos/iPhone --target /Volumes/ExternalDisk --dry-run
+# Пробный прогон (dry-run включён по умолчанию)
+./photo-sorter --source ~/Photos/iPhone --target /Volumes/ExternalDisk
 
 # Несколько источников
 ./photo-sorter --source ~/Photos/iPhone --source ~/Photos/Android --target /Volumes/ExternalDisk
 
-# Реальное копирование
+# Реальное копирование — явно отключите dry-run
 ./photo-sorter --source ~/Photos --target ~/Sorted --dry-run=false
 
-# JSON-отчёт
-./photo-sorter --source ~/Photos --target ~/Sorted --format=json --dry-run
+# JSON-отчёт вместо текстового
+./photo-sorter --source ~/Photos --target ~/Sorted --format=json
 
-# Полный список флагов
+# Посмотреть все флаги и примеры
 ./photo-sorter --help
 ```
 
-**Доступные флаги:**
-- `--source` — исходная папка (можно несколько)
+**Основные флаги:**
+- `--source` — исходная папка (можно указать несколько раз)
 - `--target` — целевая папка
 - `--template` — шаблон папок (default: `2006/01/02`)
 - `--live-photos` — группировать Live Photos (default: `true`)
