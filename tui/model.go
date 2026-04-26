@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/deduper"
@@ -43,7 +44,12 @@ type Model struct {
 	entries    []sorter.Entry
 
 	// Копирование
-	copyCancel context.CancelFunc
+	copyCancel   context.CancelFunc
+	copyProgress *atomic.Int64
+	copyTotal    *atomic.Int64
+
+	// Сканирование
+	scanCancel context.CancelFunc
 
 	// Версия и обновление
 	version      string
@@ -53,13 +59,15 @@ type Model struct {
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
 func NewModel(version string) Model {
 	return Model{
-		screen:   ScreenSources,
-		version:  version,
-		sources:  newSourcesModel(),
-		target:   newTargetModel(),
-		settings: newSettingsModel(),
-		scan:     newScanModel(),
-		copy:     newCopyModel(),
+		screen:       ScreenSources,
+		version:      version,
+		sources:      newSourcesModel(),
+		target:       newTargetModel(),
+		settings:     newSettingsModel(),
+		scan:         newScanModel(),
+		copy:         newCopyModel(),
+		copyProgress: new(atomic.Int64),
+		copyTotal:    new(atomic.Int64),
 	}
 }
 
@@ -107,6 +115,12 @@ func (m Model) View() string {
 }
 
 func (m Model) resetToSources() (tea.Model, tea.Cmd) {
+	if m.copyCancel != nil {
+		m.copyCancel()
+	}
+	if m.scanCancel != nil {
+		m.scanCancel()
+	}
 	m.screen = ScreenSources
 	m.Source = ""
 	m.Target = ""
@@ -118,5 +132,7 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.settings = newSettingsModel()
 	m.scan = newScanModel()
 	m.copy = newCopyModel()
+	m.copyProgress = new(atomic.Int64)
+	m.copyTotal = new(atomic.Int64)
 	return m, nil
 }

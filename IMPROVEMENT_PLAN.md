@@ -24,11 +24,7 @@
 
 ## 1. Критические баги и риск потери данных
 
-### 1.1 `tui/copy.go:16-17, 65-67` — Глобальные атомики портят прогресс при повторном запуске
-
-**Проблема:** `copyCurrent` и `copyTotal` — package-level `atomic.Int64`. Если пользователь быстро перезапустит копирование (через "начать заново"), старая goroutine продолжит писать в эти же атомики. Прогресс-бар покажет мусор.
-
-**Как исправить:** перенести атомики внутрь `copyModel` (или использовать канал для прогресса), передавать их как параметр в callback.
+Все P0 блокеры устранены.
 
 ---
 
@@ -579,27 +575,27 @@ const (
 ## Приоритетный план действий (рекомендация по порядку исправления)
 
 ### P0 — Критично (блокер релиза)
-1. `copy.go` — убрать глобальные атомики, починить утечку goroutine.
+Все P0 блокеры устранены.
 
 ### P1 — Высокий (безопасность и стабильность)
-2. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
-3. `runner.go` — прокинуть `ctx` во все этапы pipeline.
-4. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
-5. `copier.go` — точный подсчёт свободного места.
+1. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
+2. `runner.go` — прокинуть `ctx` во все этапы pipeline.
+3. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
+4. `copier.go` — точный подсчёт свободного места.
 
 ### P2 — Средний (производительность и UX)
-6. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
-7. `video.go` — batch-вызов `exiftool` для всех видео.
-8. `hasher.go` — убрать лишний `bufio.NewReader`.
-9. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
-10. `scan.go` — реальный прогресс вместо фейкового.
-11. `main.go` — починить валидацию шаблона даты.
+5. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
+6. `video.go` — batch-вызов `exiftool` для всех видео.
+7. `hasher.go` — убрать лишний `bufio.NewReader`.
+8. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
+9. `scan.go` — реальный прогресс вместо фейкового.
+10. `main.go` — починить валидацию шаблона даты.
 
 ### P3 — Низкий (рефакторинг и мелочи)
-12. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
-13. Вынести общие дефолты в `internal/config`.
-14. Добавить benchmark и fuzz тесты.
-15. Убрать магические строки/числа в константы.
+11. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
+12. Вынести общие дефолты в `internal/config`.
+13. Добавить benchmark и fuzz тесты.
+14. Убрать магические строки/числа в константы.
 
 ---
 

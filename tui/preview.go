@@ -22,9 +22,9 @@ func (m Model) updatePreview(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = ScreenCopy
 			m.copy = newCopyModel()
 			m.copy.running = true
-			copyCurrent.Store(0)
-			copyTotal.Store(int64(len(m.entries)))
-			return m, tea.Batch(copyTickCmd(), m.startCopy())
+			m.copyProgress.Store(0)
+			m.copyTotal.Store(int64(len(m.entries)))
+			return m, tea.Batch(copyTickCmd(m), m.startCopy())
 		}
 	}
 	return m, nil

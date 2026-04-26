@@ -2,19 +2,16 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/logger"
 )
-
-var copyCurrent atomic.Int64
-var copyTotal atomic.Int64
 
 type copyTickMsg struct {
 	current int
@@ -33,22 +30,28 @@ type copyModel struct {
 	done    bool
 	errMsg  string
 	stats   copier.Stats
+	aborted bool // true если пользователь нажал Esc
 }
 
 func newCopyModel() copyModel {
 	return copyModel{}
 }
 
-func copyTickCmd() tea.Cmd {
+func copyTickCmd(m Model) tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(t time.Time) tea.Msg {
 		return copyTickMsg{
-			current: int(copyCurrent.Load()),
-			total:   int(copyTotal.Load()),
+			current: int(m.copyProgress.Load()),
+			total:   int(m.copyTotal.Load()),
 		}
 	})
 }
 
 func (m Model) startCopy() tea.Cmd {
+	// Отменяем предыдущее копирование, если оно ещё бежит.
+	if m.copyCancel != nil {
+		m.copyCancel()
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	m.copyCancel = cancel
 
@@ -63,8 +66,8 @@ func (m Model) startCopy() tea.Cmd {
 	go func() {
 		c := copier.New(dryRun, m.Target)
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
-			copyCurrent.Store(int64(cur))
-			copyTotal.Store(int64(tot))
+			m.copyProgress.Store(int64(cur))
+			m.copyTotal.Store(int64(tot))
 		})
 		ch <- result{stats: stats, err: err}
 	}()
@@ -83,14 +86,17 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.copy.current = msg.current
 		m.copy.total = msg.total
-		return m, copyTickCmd()
+		return m, copyTickCmd(m)
 
 	case copyDoneMsg:
+		if m.copy.aborted {
+			return m, nil
+		}
 		m.copy.running = false
 		m.copy.done = true
-		if msg.err != nil {
+		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.copy.errMsg = msg.err.Error()
-		} else {
+		} else if msg.err == nil {
 			m.copy.stats = msg.stats
 		}
 		m.logCopyResult()
@@ -102,6 +108,9 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.copyCancel != nil {
 					m.copyCancel()
 				}
+				m.copy.running = false
+				m.copy.aborted = true
+				m.copy.errMsg = "Отменено пользователем"
 				return m, nil
 			}
 			return m, nil

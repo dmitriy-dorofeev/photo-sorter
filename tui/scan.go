@@ -59,6 +59,7 @@ type scanModel struct {
 	progress float64 // 0..100
 	done     bool
 	errMsg   string
+	aborted  bool // true если пользователь прервал или ушёл назад
 }
 
 func newScanModel() scanModel {
@@ -74,6 +75,10 @@ func (s scanModel) Init() tea.Cmd {
 // ---------------------------------------------------------------------------
 
 func (m Model) startScan() tea.Cmd {
+	if m.scanCancel != nil {
+		m.scanCancel()
+	}
+
 	cfg := runner.Config{
 		Sources:      []string{m.Source},
 		Target:       m.Target,
@@ -83,8 +88,11 @@ func (m Model) startScan() tea.Cmd {
 		UseMTime:     m.GetSettingBool("use_mtime"),
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	m.scanCancel = cancel
+
 	return func() tea.Msg {
-		res, err := runner.Run(context.Background(), cfg, nil)
+		res, err := runner.Run(ctx, cfg, nil)
 		if err != nil {
 			return scanResultMsg{err: err}
 		}
@@ -119,6 +127,9 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scanTickCmd()
 
 	case scanResultMsg:
+		if m.scan.aborted {
+			return m, nil
+		}
 		m.scan.running = false
 		if msg.err != nil {
 			m.scan.errMsg = msg.err.Error()
@@ -135,8 +146,16 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
+			if m.scanCancel != nil {
+				m.scanCancel()
+			}
+			m.scan.aborted = true
 			return m, tea.Quit
 		case tea.KeyLeft:
+			if m.scanCancel != nil {
+				m.scanCancel()
+			}
+			m.scan.aborted = true
 			m.scan = newScanModel()
 			m.screen = ScreenSettings
 			return m, nil
@@ -144,6 +163,9 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "enter":
 			if m.scan.errMsg != "" {
+				if m.scanCancel != nil {
+					m.scanCancel()
+				}
 				m.scan = newScanModel()
 				m.scan.running = true
 				return m, tea.Batch(scanTickCmd(), m.startScan())
