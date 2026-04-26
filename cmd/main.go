@@ -147,6 +147,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Проверка доступности target для записи
+	if err := os.MkdirAll(target, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка: не удалось создать целевую папку: %v\n", err)
+		os.Exit(1)
+	}
+	tmpFile, err := os.CreateTemp(target, ".write-test-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка: целевая папка недоступна для записи: %v\n", err)
+		os.Exit(1)
+	}
+	tmpFile.Close()
+	os.Remove(tmpFile.Name())
+
 	if template == "" {
 		fmt.Fprintln(os.Stderr, "Ошибка: шаблон даты не может быть пустым (--template)")
 		os.Exit(1)
@@ -158,8 +171,13 @@ func main() {
 	}
 
 	for _, src := range sources {
-		if _, err := os.Stat(src); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка не существует: %s\n", src)
+		info, err := os.Stat(src)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка недоступна: %s\n", src)
+			os.Exit(1)
+		}
+		if !info.IsDir() {
+			fmt.Fprintf(os.Stderr, "Ошибка: %s не является директорией\n", src)
 			os.Exit(1)
 		}
 	}
@@ -186,6 +204,12 @@ func main() {
 	stats, err := c.Copy(context.Background(), res.Entries, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка копирования: %v\n", err)
+		// Выводим частичную статистику перед выходом
+		if format == "json" {
+			printJSONReport(res, stats)
+		} else {
+			printTextReport(res, stats)
+		}
 		os.Exit(1)
 	}
 
