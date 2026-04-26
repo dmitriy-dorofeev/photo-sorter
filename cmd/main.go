@@ -306,5 +306,8 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(report)
+	if err := enc.Encode(report); err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка вывода JSON: %v\n", err)
+		os.Exit(1)
+	}
 }

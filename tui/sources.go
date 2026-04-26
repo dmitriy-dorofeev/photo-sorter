@@ -68,7 +68,13 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if len(m.Sources) > 0 {
 				m.screen = ScreenTarget
 				m.target.currentDir = m.sources.currentDir
-				m.target.items = loadDirItems(m.target.currentDir)
+				items, err := loadDirItems(m.target.currentDir)
+				m.target.items = items
+				if err != nil {
+					m.target.readErr = err.Error()
+				} else {
+					m.target.readErr = ""
+				}
 				m.target.cursor = 0
 			}
 			return m, nil
@@ -122,27 +128,31 @@ func (m Model) viewSources() string {
 	b.WriteString("\n\n")
 
 	// Список папок
-	for i, item := range m.sources.items {
-		cursor := "  "
-		if m.sources.cursor == i {
-			cursor = highlightStyle.Render("▸ ")
+	if m.sources.readErr != "" {
+		b.WriteString(errorStyle.Render("  Ошибка чтения: "+m.sources.readErr) + "\n")
+	} else {
+		for i, item := range m.sources.items {
+			cursor := "  "
+			if m.sources.cursor == i {
+				cursor = highlightStyle.Render("▸ ")
+			}
+
+			icon := "📁"
+			if item.isParent {
+				icon = "⬆️"
+			}
+
+			check := "  "
+			if _, ok := m.sources.selected[filepath.Clean(item.path)]; ok {
+				check = successStyle.Render("✓ ")
+			}
+
+			b.WriteString(fmt.Sprintf("%s%s%s %s\n", cursor, check, icon, item.name))
 		}
 
-		icon := "📁"
-		if item.isParent {
-			icon = "⬆️"
+		if len(m.sources.items) == 0 {
+			b.WriteString(errorStyle.Render("  (папка пуста)\n"))
 		}
-
-		check := "  "
-		if _, ok := m.sources.selected[filepath.Clean(item.path)]; ok {
-			check = successStyle.Render("✓ ")
-		}
-
-		b.WriteString(fmt.Sprintf("%s%s%s %s\n", cursor, check, icon, item.name))
-	}
-
-	if len(m.sources.items) == 0 {
-		b.WriteString(errorStyle.Render("  (папка пуста)\n"))
 	}
 
 	b.WriteString("\n")

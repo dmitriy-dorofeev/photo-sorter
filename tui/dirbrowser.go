@@ -22,18 +22,24 @@ type dirBrowserModel struct {
 	cursor     int
 	width      int
 	height     int
+	readErr    string // ошибка чтения директории
 }
 
 func newDirBrowserModel(startDir string) dirBrowserModel {
-	return dirBrowserModel{
+	items, err := loadDirItems(startDir)
+	db := dirBrowserModel{
 		currentDir: startDir,
-		items:      loadDirItems(startDir),
+		items:      items,
 		cursor:     0,
 	}
+	if err != nil {
+		db.readErr = err.Error()
+	}
+	return db
 }
 
 // loadDirItems возвращает список папок в директории + элемент "..".
-func loadDirItems(dir string) []dirItem {
+func loadDirItems(dir string) ([]dirItem, error) {
 	var items []dirItem
 
 	clean := filepath.Clean(dir)
@@ -47,7 +53,7 @@ func loadDirItems(dir string) []dirItem {
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return items
+		return items, err
 	}
 
 	for _, e := range entries {
@@ -69,7 +75,7 @@ func loadDirItems(dir string) []dirItem {
 		return items[i].name < items[j].name
 	})
 
-	return items
+	return items, nil
 }
 
 func (db *dirBrowserModel) moveUp() {
@@ -90,7 +96,13 @@ func (db *dirBrowserModel) enter() {
 	}
 	item := db.items[db.cursor]
 	db.currentDir = item.path
-	db.items = loadDirItems(item.path)
+	items, err := loadDirItems(item.path)
+	db.items = items
+	if err != nil {
+		db.readErr = err.Error()
+	} else {
+		db.readErr = ""
+	}
 	db.cursor = 0
 }
 
@@ -98,7 +110,13 @@ func (db *dirBrowserModel) goBack() {
 	parent := filepath.Dir(filepath.Clean(db.currentDir))
 	if parent != db.currentDir {
 		db.currentDir = parent
-		db.items = loadDirItems(parent)
+		items, err := loadDirItems(parent)
+		db.items = items
+		if err != nil {
+			db.readErr = err.Error()
+		} else {
+			db.readErr = ""
+		}
 		db.cursor = 0
 	}
 }

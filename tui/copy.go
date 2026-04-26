@@ -30,7 +30,8 @@ type copyModel struct {
 	done    bool
 	errMsg  string
 	stats   copier.Stats
-	aborted bool // true если пользователь нажал Esc
+	aborted bool   // true если пользователь нажал Esc
+	logErr  string // ошибка создания лог-файла (предупреждение)
 }
 
 func newCopyModel() copyModel {
@@ -131,6 +132,7 @@ func (m Model) logCopyResult() {
 	logPath := filepath.Join(m.Target, time.Now().Format("2006-01-02_15-04-05")+"_photo-sorter.log")
 	l, err := logger.New(logPath)
 	if err != nil {
+		m.copy.logErr = fmt.Sprintf("Не удалось создать лог: %v", err)
 		return
 	}
 	defer l.Close()
@@ -160,6 +162,9 @@ func (m Model) viewCopy() string {
 
 	if m.copy.errMsg != "" {
 		b.WriteString(errorStyle.Render("Ошибка: "+m.copy.errMsg) + "\n\n")
+		if m.copy.logErr != "" {
+			b.WriteString(errorStyle.Render("⚠ "+m.copy.logErr) + "\n\n")
+		}
 		b.WriteString(helpStyle.Render("enter — начать заново • esc — выход"))
 		return b.String()
 	}
@@ -184,6 +189,9 @@ func (m Model) viewCopy() string {
 	} else if m.copy.done {
 		b.WriteString(successStyle.Render("✓ Копирование завершено!"))
 		b.WriteString("\n\n")
+		if m.copy.logErr != "" {
+			b.WriteString(errorStyle.Render("⚠ "+m.copy.logErr) + "\n\n")
+		}
 		b.WriteString(fmt.Sprintf("Скопировано: %d\n", m.copy.stats.Copied))
 		b.WriteString(fmt.Sprintf("Пропущено (дубли): %d\n", m.copy.stats.Skipped))
 		b.WriteString(fmt.Sprintf("Ошибок: %d\n", m.copy.stats.Errors))

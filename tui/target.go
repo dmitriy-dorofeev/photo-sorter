@@ -101,22 +101,26 @@ func (m Model) viewTarget() string {
 	b.WriteString("\n\n")
 
 	// Список папок
-	for i, item := range m.target.items {
-		cursor := "  "
-		if m.target.cursor == i {
-			cursor = highlightStyle.Render("▸ ")
+	if m.target.readErr != "" {
+		b.WriteString(errorStyle.Render("  Ошибка чтения: "+m.target.readErr) + "\n")
+	} else {
+		for i, item := range m.target.items {
+			cursor := "  "
+			if m.target.cursor == i {
+				cursor = highlightStyle.Render("▸ ")
+			}
+
+			icon := "📁"
+			if item.isParent {
+				icon = "⬆️"
+			}
+
+			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, icon, item.name))
 		}
 
-		icon := "📁"
-		if item.isParent {
-			icon = "⬆️"
+		if len(m.target.items) == 0 {
+			b.WriteString(errorStyle.Render("  (папка пуста)\n"))
 		}
-
-		b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, icon, item.name))
-	}
-
-	if len(m.target.items) == 0 {
-		b.WriteString(errorStyle.Render("  (папка пуста)\n"))
 	}
 
 	b.WriteString("\n")
