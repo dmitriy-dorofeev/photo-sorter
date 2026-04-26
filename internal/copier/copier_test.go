@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -208,5 +209,141 @@ func TestCopy_AbortOnMissingTarget(t *testing.T) {
 	want := "target disk unavailable after 3 consecutive errors"
 	if err.Error() != want {
 		t.Fatalf("unexpected error: %v (want %s)", err, want)
+	}
+}
+
+func TestCopy_PathTraversal(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	os.WriteFile(filepath.Join(srcDir, "a.jpg"), []byte("x"), 0644)
+
+	c := New(false, dstDir)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.jpg"), Name: "a.jpg", Size: 1}, Target: filepath.Join(dstDir, "..", "outside.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Errors != 1 {
+		t.Errorf("expected 1 error, got %d", stats.Errors)
+	}
+	if len(stats.ErrorList) != 1 {
+		t.Errorf("expected 1 error entry, got %d", len(stats.ErrorList))
+	}
+	if _, e := os.Stat(filepath.Join(dstDir, "..", "outside.jpg")); !os.IsNotExist(e) {
+		t.Error("path traversal should not create file outside target")
+	}
+}
+
+func TestCopy_SymlinkAttack(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("new content"), 0644)
+
+	// Создаём файл-жертву за пределами target.
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	os.WriteFile(victim, []byte("victim"), 0644)
+
+	// Создаём symlink в target, указывающий на victim.
+	symlink := filepath.Join(dstDir, "a.jpg")
+	if err := os.Symlink(victim, symlink); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	c := New(false, dstDir)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 11}, Target: symlink},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+
+	// Проверяем, что symlink заменён обычным файлом.
+	info, err := os.Lstat(symlink)
+	if err != nil {
+		t.Fatalf("lstat failed: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Error("symlink was not replaced with regular file")
+	}
+	data, err := os.ReadFile(symlink)
+	if err != nil {
+		t.Fatalf("read failed: %v", err)
+	}
+	if string(data) != "new content" {
+		t.Errorf("content mismatch: %q", string(data))
+	}
+
+	// Проверяем, что victim не был перезаписан.
+	victimData, err := os.ReadFile(victim)
+	if err != nil {
+		t.Fatalf("read victim: %v", err)
+	}
+	if string(victimData) != "victim" {
+		t.Error("symlink attack succeeded: victim was overwritten")
+	}
+}
+
+func TestCopy_NotEnoughDiskSpace(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := &Copier{dryRun: false, targetRoot: dstDir, spaceFunc: func(string) (uint64, error) {
+		return 1, nil // 1 байт свободно, нужно 5
+	}}
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	_, err := c.Copy(context.Background(), entries, nil)
+	if err == nil {
+		t.Fatal("expected error for not enough disk space")
+	}
+	if !os.IsNotExist(err) {
+		// Должна быть ошибка "not enough disk space"
+		if err.Error() != "not enough disk space: need 5 bytes, have 1 bytes" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+}
+
+func TestCopy_ContextCancelMidway(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	for i := 0; i < 3; i++ {
+		os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644)
+	}
+
+	c := New(false, dstDir)
+	var entries []sorter.Entry
+	for i := 0; i < 3; i++ {
+		entries = append(entries, sorter.Entry{
+			Source: scanner.FileInfo{Path: filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), Name: fmt.Sprintf("f%d.txt", i), Size: 1},
+			Target: filepath.Join(dstDir, fmt.Sprintf("f%d.txt", i)),
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Отменяем после обработки первого файла.
+	var cancelOnce sync.Once
+	_, err := c.Copy(ctx, entries, func(cur, tot int) {
+		if cur >= 1 {
+			cancelOnce.Do(cancel)
+		}
+	})
+	if err == nil {
+		t.Fatal("expected context cancellation error")
 	}
 }

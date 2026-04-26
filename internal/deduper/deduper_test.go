@@ -2,9 +2,12 @@ package deduper
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"golang.org/x/sys/unix"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 )
@@ -166,5 +169,73 @@ func TestFindDuplicates(t *testing.T) {
 				tt.check(t, got)
 			}
 		})
+	}
+}
+
+func TestFindDuplicates_HashError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping permission test when running as root")
+	}
+
+	dir := t.TempDir()
+	noRead := filepath.Join(dir, "secret.bin")
+	os.WriteFile(noRead, []byte("secret"), 0644)
+	os.Chmod(noRead, 0000)
+	defer os.Chmod(noRead, 0644)
+
+	// Одинаковый размер, чтобы оба файла попали в группу хеширования.
+	files := []scanner.FileInfo{
+		{Path: noRead, Name: "secret.bin", Size: 100},
+		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
+	}
+	d := New(files, true)
+	_, err := d.FindDuplicates(context.Background())
+	if err == nil {
+		t.Error("expected error from hash failure")
+	}
+}
+
+func TestFindDuplicates_NamedPipe(t *testing.T) {
+	dir := t.TempDir()
+	pipePath := filepath.Join(dir, "pipe.bin")
+	if err := unix.Mkfifo(pipePath, 0644); err != nil {
+		t.Skipf("cannot create fifo: %v", err)
+	}
+
+	// Одинаковый размер, чтобы оба файла попали в группу хеширования.
+	files := []scanner.FileInfo{
+		{Path: pipePath, Name: "pipe.bin", Size: 100},
+		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
+	}
+	d := New(files, true)
+	_, err := d.FindDuplicates(context.Background())
+	if err == nil {
+		t.Error("expected error from hashing named pipe")
+	}
+}
+
+func BenchmarkFindDuplicates(b *testing.B) {
+	dir := b.TempDir()
+	var files []scanner.FileInfo
+	// 100 файлов: каждые два — дубликаты.
+	for i := 0; i < 100; i++ {
+		path := filepath.Join(dir, fmt.Sprintf("file%03d.bin", i))
+		content := []byte(fmt.Sprintf("content-%d", i/2))
+		os.WriteFile(path, content, 0644)
+		files = append(files, scanner.FileInfo{
+			Path: path,
+			Name: fmt.Sprintf("file%03d.bin", i),
+			Size: int64(len(content)),
+		})
+	}
+	d := New(files, true)
+	ctx := context.Background()
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := d.FindDuplicates(ctx)
+		if err != nil {
+			b.Fatal(err)
+		}
 	}
 }

@@ -2,10 +2,12 @@ package scanner
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 )
 
 func TestScan_FilterExtensions(t *testing.T) {
@@ -79,4 +81,127 @@ func TestScan_Subdirs(t *testing.T) {
 	if len(files) != 2 {
 		t.Fatalf("expected 2 files, got %d", len(files))
 	}
+}
+
+func TestScan_NonExistentSource(t *testing.T) {
+	s := New([]string{"/nonexistent/path/12345"})
+	_, err := s.Scan(context.Background())
+	if err == nil {
+		t.Error("expected error for nonexistent source")
+	}
+}
+
+func TestScan_EmptyDir(t *testing.T) {
+	dir := t.TempDir()
+	s := New([]string{dir}, ".jpg")
+	files, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected 0 files, got %d", len(files))
+	}
+}
+
+func TestScan_PermissionDenied(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("skipping permission test when running as root")
+	}
+
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "accessible"), 0755)
+	os.WriteFile(filepath.Join(dir, "accessible", "a.jpg"), []byte("a"), 0644)
+
+	locked := filepath.Join(dir, "locked")
+	os.MkdirAll(locked, 0755)
+	os.WriteFile(filepath.Join(locked, "b.jpg"), []byte("b"), 0644)
+	if err := os.Chmod(locked, 0000); err != nil {
+		t.Skipf("cannot chmod: %v", err)
+	}
+	defer os.Chmod(locked, 0755)
+
+	s := New([]string{dir}, ".jpg")
+	files, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (accessible only), got %d", len(files))
+	}
+	if files[0].Name != "a.jpg" {
+		t.Errorf("expected a.jpg, got %s", files[0].Name)
+	}
+}
+
+func TestScan_Symlink(t *testing.T) {
+	dir := t.TempDir()
+	realFile := filepath.Join(dir, "real.jpg")
+	os.WriteFile(realFile, []byte("x"), 0644)
+	linkFile := filepath.Join(dir, "link.jpg")
+	if err := os.Symlink(realFile, linkFile); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	s := New([]string{dir}, ".jpg")
+	files, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	// WalkDir обходит symlink как отдельный файл (Lstat).
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files (real + symlink), got %d", len(files))
+	}
+	// Размер symlink — размер самой ссылки, а не цели.
+	var symlinkSize int64
+	for _, f := range files {
+		if f.Name == "link.jpg" {
+			symlinkSize = f.Size
+		}
+	}
+	if symlinkSize == 1 {
+		t.Error("symlink size should be size of link, not target")
+	}
+}
+
+func TestScan_ContextCancel(t *testing.T) {
+	dir1 := t.TempDir()
+	dir2 := t.TempDir()
+	// dir1: много файлов
+	for i := 0; i < 50; i++ {
+		os.WriteFile(filepath.Join(dir1, "file"+string(rune('a'+i%26))+".jpg"), []byte("x"), 0644)
+	}
+	// dir2: один файл
+	os.WriteFile(filepath.Join(dir2, "single.jpg"), []byte("y"), 0644)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	s := New([]string{dir1, dir2}, ".jpg")
+
+	// Отменяем сразу — один из воркеров должен поймать ctx.Done().
+	cancel()
+
+	_, err := s.Scan(ctx)
+	if err == nil {
+		t.Error("expected context cancellation error")
+	}
+}
+
+func TestScan_ManyFiles(t *testing.T) {
+	dir := t.TempDir()
+	want := 500
+	for i := 0; i < want; i++ {
+		name := filepath.Join(dir, fmt.Sprintf("file%03d.jpg", i))
+		os.WriteFile(name, []byte("x"), 0644)
+	}
+
+	s := New([]string{dir}, ".jpg")
+	start := time.Now()
+	files, err := s.Scan(context.Background())
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(files) != want {
+		t.Fatalf("expected %d files, got %d", want, len(files))
+	}
+	t.Logf("scanned %d files in %v", want, elapsed)
 }

@@ -2,8 +2,11 @@ package dateresolver
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"photo-sorter/internal/scanner"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -214,5 +217,111 @@ func TestResolve_Priority(t *testing.T) {
 		if ok {
 			t.Fatal("expected false when no date source available")
 		}
+	})
+}
+
+// TestExtractVideoDate_CommandInjection проверяет, что файл с именем,
+// начинающимся на "-", не интерпретируется как флаг exiftool.
+func TestExtractVideoDate_CommandInjection(t *testing.T) {
+	tmp := t.TempDir()
+	movPath := filepath.Join(tmp, "-test.mov")
+	os.WriteFile(movPath, []byte("fake"), 0644)
+
+	fakeExifTool := filepath.Join(t.TempDir(), "fake_exiftool.sh")
+	script := `#!/bin/sh
+echo '[{"CreateDate":"2023:07:07 07:07:07"}]'
+`
+	os.WriteFile(fakeExifTool, []byte(script), 0755)
+
+	got, ok := extractVideoDate(movPath, fakeExifTool)
+	if !ok {
+		t.Fatal("expected date from file with leading dash")
+	}
+	want := time.Date(2023, 7, 7, 7, 7, 7, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+// TestExtractVideoDate_Timeout проверяет, что зависший exiftool
+// прерывается по таймауту и возвращает (_, false).
+func TestExtractVideoDate_Timeout(t *testing.T) {
+	oldTimeout := videoTimeout
+	videoTimeout = 2 * time.Second
+	defer func() { videoTimeout = oldTimeout }()
+
+	tmp := t.TempDir()
+	movPath := filepath.Join(tmp, "slow.mov")
+	os.WriteFile(movPath, []byte("fake"), 0644)
+
+	// Собираем fake exiftool на Go, чтобы избежать проблем с shell script + sleep.
+	fakeDir := t.TempDir()
+	fakeSrc := filepath.Join(fakeDir, "main.go")
+	os.WriteFile(fakeSrc, []byte("package main\nimport \"time\"\nfunc main() { time.Sleep(120 * time.Second) }\n"), 0644)
+	fakeBin := filepath.Join(fakeDir, "fake_exiftool")
+	if err := exec.Command("go", "build", "-o", fakeBin, fakeSrc).Run(); err != nil {
+		t.Skipf("cannot build fake exiftool: %v", err)
+	}
+
+	start := time.Now()
+	_, ok := extractVideoDate(movPath, fakeBin)
+	elapsed := time.Since(start)
+	if ok {
+		t.Fatal("expected false on timeout")
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("timeout took too long: %v", elapsed)
+	}
+}
+
+// TestExtractVideoDate_Concurrent проверяет, что параллельные вызовы
+// extractVideoDate работают корректно (нет data races).
+func TestExtractVideoDate_Concurrent(t *testing.T) {
+	tmp := t.TempDir()
+	movPath := filepath.Join(tmp, "concurrent.mov")
+	os.WriteFile(movPath, []byte("fake"), 0644)
+
+	fakeExifTool := filepath.Join(t.TempDir(), "fake_exiftool.sh")
+	script := `#!/bin/sh
+echo '[{"CreateDate":"2023:07:07 07:07:07"}]'
+`
+	os.WriteFile(fakeExifTool, []byte(script), 0755)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, ok := extractVideoDate(movPath, fakeExifTool)
+			if !ok {
+				t.Error("expected date from concurrent call")
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// FuzzResolveDate фаззит resolver.Resolve с разными именами файлов,
+// расширениями и флагом UseModTime. Цель — убедиться, что функция
+// никогда не паникует при некорректных входных данных.
+func FuzzResolveDate(f *testing.F) {
+	f.Add("IMG_20240315_143022.jpg", ".jpg", true)
+	f.Add("photo.jpg", ".jpg", false)
+	f.Add("Screenshot 2024-03-15 at 14.30.22.png", ".png", true)
+	f.Add("", ".jpg", true)
+	f.Add("-test.mov", ".mov", false)
+
+	f.Fuzz(func(t *testing.T, name, ext string, useModTime bool) {
+		r := New()
+		r.UseModTime = useModTime
+		fi := scanner.FileInfo{
+			Path:    filepath.Join("/tmp", name),
+			Name:    name,
+			ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
+			Ext:     strings.ToLower(ext),
+		}
+		// Для несуществующих файлов EXIF не прочитается, но Resolve
+		// должен корректно обработать любое имя без паники.
+		_, _ = r.Resolve(fi)
 	})
 }

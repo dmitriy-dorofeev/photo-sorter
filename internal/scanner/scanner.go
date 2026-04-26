@@ -56,6 +56,10 @@ func (s *Scanner) Scan(ctx context.Context) ([]FileInfo, error) {
 					if d != nil && d.IsDir() {
 						return filepath.SkipDir
 					}
+					// Для корневого пути прокидываем ошибку (например, несуществующая директория).
+					if path == src {
+						return err
+					}
 					return nil
 				}
 				if d.IsDir() {

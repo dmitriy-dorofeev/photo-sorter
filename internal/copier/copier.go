@@ -27,12 +27,13 @@ type Stats struct {
 type Copier struct {
 	dryRun     bool
 	targetRoot string
+	spaceFunc  func(string) (uint64, error)
 }
 
 // New создаёт новый Copier.
 // targetRoot используется для проверки свободного места.
 func New(dryRun bool, targetRoot string) *Copier {
-	return &Copier{dryRun: dryRun, targetRoot: targetRoot}
+	return &Copier{dryRun: dryRun, targetRoot: targetRoot, spaceFunc: availableSpace}
 }
 
 // Copy выполняет копирование по плану сортировки.
@@ -204,7 +205,7 @@ func (c *Copier) checkDiskSpace(entries []sorter.Entry) error {
 	if needed == 0 {
 		return nil
 	}
-	available, err := availableSpace(c.targetRoot)
+	available, err := c.spaceFunc(c.targetRoot)
 	if err != nil {
 		return fmt.Errorf("cannot check disk space: %w", err)
 	}

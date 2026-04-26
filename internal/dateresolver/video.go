@@ -9,6 +9,10 @@ import (
 	"photo-sorter/internal/scanner"
 )
 
+// videoTimeout используется в extractVideoDate и extractVideoDates.
+// Переопределяется в тестах для ускорения.
+var videoTimeout = 30 * time.Second
+
 // isVideo возвращает true для видео-расширений.
 // Контракт: scanner.FileInfo.Ext всегда lowercase.
 func isVideo(ext string) bool {
@@ -27,7 +31,7 @@ func extractVideoDate(path, exifToolPath string) (time.Time, bool) {
 		exifToolPath = "exiftool"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), videoTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, exifToolPath,
@@ -70,7 +74,7 @@ func extractVideoDates(files []scanner.FileInfo, exifToolPath string) map[string
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), videoTimeout)
 	defer cancel()
 
 	args := []string{

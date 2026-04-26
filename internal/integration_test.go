@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,28 @@ import (
 	"photo-sorter/internal/sorter"
 )
 
+func countFilesWithExts(dir string, exts ...string) int {
+	want := make(map[string]struct{})
+	for _, e := range exts {
+		want[strings.ToLower(e)] = struct{}{}
+	}
+	var n int
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if len(want) > 0 {
+			ext := strings.ToLower(filepath.Ext(d.Name()))
+			if _, ok := want[ext]; !ok {
+				return nil
+			}
+		}
+		n++
+		return nil
+	})
+	return n
+}
+
 func TestEndToEnd(t *testing.T) {
 	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
@@ -25,8 +48,9 @@ func TestEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
-	if len(files) != 12 {
-		t.Fatalf("expected 12 files, got %d", len(files))
+	expectedCount := countFilesWithExts(sourceDir, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
+	if len(files) != expectedCount {
+		t.Fatalf("expected %d files, got %d", expectedCount, len(files))
 	}
 
 	// 2. Resolve dates (UseModTime = true by default; force false for this test)
@@ -268,8 +292,9 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
-	if len(files) != 9 {
-		t.Fatalf("expected 9 files in 2024/, got %d", len(files))
+	expectedCount := countFilesWithExts(sourceDir, ".jpg", ".jpeg", ".png", ".mp4")
+	if len(files) != expectedCount {
+		t.Fatalf("expected %d files in 2024/, got %d", expectedCount, len(files))
 	}
 
 	resolver := dateresolver.New()
