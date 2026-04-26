@@ -57,9 +57,6 @@ func (m Model) viewPreview() string {
 				break
 			}
 			rel, _ := filepath.Rel(m.Target, d)
-			if rel == "." {
-				rel = "/"
-			}
 			b.WriteString(fmt.Sprintf("  📁 %s (%d файлов)\n", rel, m.dirFileCount(d)))
 			shown++
 		}

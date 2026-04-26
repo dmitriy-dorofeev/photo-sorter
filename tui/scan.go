@@ -103,7 +103,7 @@ func (m Model) startScan() tea.Cmd {
 	}
 
 	cfg := runner.Config{
-		Sources:      []string{m.Source},
+		Sources:      m.Sources,
 		Target:       m.Target,
 		Template:     m.GetSettingString("template"),
 		LivePhotos:   m.GetSettingBool("live_photos"),

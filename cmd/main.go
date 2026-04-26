@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/sorter"
@@ -73,11 +74,11 @@ func main() {
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
 	flag.StringVar(&target, "target", "", "Целевая папка")
-	flag.StringVar(&template, "template", "2006/01/02", "Шаблон папок (Go time layout)")
-	flag.BoolVar(&livePhotos, "live-photos", true, "Группировать Live Photos")
-	flag.BoolVar(&includeVideo, "include-video", true, "Обрабатывать видео")
+	flag.StringVar(&template, "template", config.DefaultTemplate, "Шаблон папок (Go time layout)")
+	flag.BoolVar(&livePhotos, "live-photos", config.DefaultLivePhotos, "Группировать Live Photos")
+	flag.BoolVar(&includeVideo, "include-video", config.DefaultIncludeVideo, "Обрабатывать видео")
 	flag.BoolVar(&dryRun, "dry-run", true, "Пробный прогон без копирования")
-	flag.BoolVar(&useMTime, "use-mtime", false, "Fallback на дату изменения файла")
+	flag.BoolVar(&useMTime, "use-mtime", config.DefaultUseMTime, "Fallback на дату изменения файла")
 	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
@@ -95,11 +96,11 @@ func main() {
   --target string      Целевая папка (обязательно)
 
 Настройки сортировки:
-  --template string    Шаблон папок (default: "2006/01/02")
+  --template string    Шаблон папок (default: "2006-01-02")
   --live-photos        Группировать Live Photos (default: true)
   --include-video      Обрабатывать видео (default: true)
   --dry-run            Пробный прогон (default: true)
-  --use-mtime          Fallback на дату изменения (default: false)
+  --use-mtime          Fallback на дату изменения (default: true)
 
 Вывод:
   --format string      Формат отчёта: text | json (default: "text")

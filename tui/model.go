@@ -28,8 +28,8 @@ type Model struct {
 	screen Screen
 
 	// Данные, общие для всех экранов
-	Source string
-	Target string
+	Sources []string
+	Target  string
 
 	// Экраны (внутренние модели)
 	sources  sourcesModel
@@ -126,7 +126,7 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 		m.scanCancel()
 	}
 	m.screen = ScreenSources
-	m.Source = ""
+	m.Sources = nil
 	m.Target = ""
 	m.files = nil
 	m.duplicates = nil

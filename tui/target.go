@@ -86,9 +86,13 @@ func (m Model) viewTarget() string {
 	b.WriteString(subtitleStyle.Render("Шаг 2. Выбор целевой папки"))
 	b.WriteString("\n\n")
 
-	// ── Выбранный источник (read-only) ──
-	b.WriteString(highlightStyle.Render("Источник: "))
-	b.WriteString(m.Source + "\n")
+	// ── Выбранные источники (read-only) ──
+	b.WriteString(highlightStyle.Render("Источники: "))
+	if len(m.Sources) == 0 {
+		b.WriteString("(не выбрано)\n")
+	} else {
+		b.WriteString(strings.Join(m.Sources, ", ") + "\n")
+	}
 	b.WriteString("\n")
 
 	// ── Блок выбора цели ──

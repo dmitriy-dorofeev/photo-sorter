@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +13,7 @@ import (
 // sourcesModel — состояние экрана выбора источника.
 type sourcesModel struct {
 	dirBrowserModel
+	selected map[string]struct{} // множество выбранных путей
 }
 
 func newSourcesModel() sourcesModel {
@@ -22,6 +24,7 @@ func newSourcesModel() sourcesModel {
 
 	return sourcesModel{
 		dirBrowserModel: newDirBrowserModel(home),
+		selected:        make(map[string]struct{}),
 	}
 }
 
@@ -62,7 +65,7 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case tea.KeyRight:
-			if m.Source != "" {
+			if len(m.Sources) > 0 {
 				m.screen = ScreenTarget
 				m.target.currentDir = m.sources.currentDir
 				m.target.items = loadDirItems(m.target.currentDir)
@@ -72,7 +75,7 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case " ": // пробел — выбрать/заменить папку под курсором как источник
+		case " ": // пробел — добавить/удалить папку из списка источников
 			if len(m.sources.items) == 0 {
 				return m, nil
 			}
@@ -80,7 +83,18 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if item.isParent {
 				return m, nil // нельзя выбрать ".."
 			}
-			m.Source = filepath.Clean(item.path)
+			path := filepath.Clean(item.path)
+			if _, ok := m.sources.selected[path]; ok {
+				delete(m.sources.selected, path)
+			} else {
+				m.sources.selected[path] = struct{}{}
+			}
+			// Синхронизируем Model.Sources
+			m.Sources = make([]string, 0, len(m.sources.selected))
+			for p := range m.sources.selected {
+				m.Sources = append(m.Sources, p)
+			}
+			sort.Strings(m.Sources)
 			return m, nil
 
 		}
@@ -119,7 +133,12 @@ func (m Model) viewSources() string {
 			icon = "⬆️"
 		}
 
-		b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, icon, item.name))
+		check := "  "
+		if _, ok := m.sources.selected[filepath.Clean(item.path)]; ok {
+			check = successStyle.Render("✓ ")
+		}
+
+		b.WriteString(fmt.Sprintf("%s%s%s %s\n", cursor, check, icon, item.name))
 	}
 
 	if len(m.sources.items) == 0 {
@@ -128,23 +147,29 @@ func (m Model) viewSources() string {
 
 	b.WriteString("\n")
 
-	// ── Блок выбранного источника ──
-	b.WriteString(highlightStyle.Render("Источник: "))
-	if m.Source == "" {
+	// ── Блок выбранных источников ──
+	b.WriteString(highlightStyle.Render("Источники: "))
+	if len(m.Sources) == 0 {
 		b.WriteString("(не выбрано)\n")
 	} else {
-		b.WriteString(m.Source + "\n")
+		for i, src := range m.Sources {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(src)
+		}
+		b.WriteString(fmt.Sprintf(" (%d)\n", len(m.Sources)))
 	}
 
 	b.WriteString("\n")
 
 	nextHint := helpStyle.Render("→ — продолжить »")
-	if m.Source == "" {
-		nextHint = helpStyle.Render("→ — продолжить (выберите источник)")
+	if len(m.Sources) == 0 {
+		nextHint = helpStyle.Render("→ — продолжить (выберите хотя бы один источник)")
 	}
 
 	b.WriteString(helpStyle.Render(
-		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел — выбрать источник • → — продолжить • esc — выход",
+		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел — выбрать/убрать • → — продолжить • esc — выход",
 	))
 	b.WriteString("\n")
 	b.WriteString(nextHint)

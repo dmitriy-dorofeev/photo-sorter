@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"photo-sorter/internal/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -92,28 +93,28 @@ func newSettingsModel() settingsModel {
 				label: "Шаблон папок",
 				key:   "template",
 				help:  "Формат именования папок по дате",
-				value: "2006-01-02",
+				value: config.DefaultTemplate,
 				stype: settingTypeText,
 			},
 			{
 				label: "Группировать Live Photos",
 				key:   "live_photos",
-				help:  "Копировать .mov рядом с .heic",
-				value: true,
+				help:  "Не считать .heic + .mov дубликатами (Live Photos)",
+				value: config.DefaultLivePhotos,
 				stype: settingTypeBool,
 			},
 			{
 				label: "Включать видео",
 				key:   "include_video",
 				help:  "Обрабатывать видеофайлы",
-				value: true,
+				value: config.DefaultIncludeVideo,
 				stype: settingTypeBool,
 			},
 			{
 				label: "Использовать дату изменения",
 				key:   "use_mtime",
 				help:  "Если нет EXIF/имени, использовать ModTime файла",
-				value: true,
+				value: config.DefaultUseMTime,
 				stype: settingTypeBool,
 			},
 		},
@@ -269,8 +270,12 @@ func (m Model) viewSettings() string {
 	b.WriteString("\n\n")
 
 	// Показываем выбранные пути
-	b.WriteString(highlightStyle.Render("Источник: "))
-	b.WriteString(m.Source + "\n")
+	b.WriteString(highlightStyle.Render("Источники: "))
+	if len(m.Sources) == 0 {
+		b.WriteString("(не выбрано)\n")
+	} else {
+		b.WriteString(strings.Join(m.Sources, ", ") + "\n")
+	}
 	b.WriteString(highlightStyle.Render("Цель: "))
 	b.WriteString(m.Target + "\n")
 	b.WriteString("\n")

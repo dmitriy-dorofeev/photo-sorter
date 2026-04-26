@@ -197,7 +197,7 @@ go test -v ./...
 **Основные флаги:**
 - `--source` — исходная папка (можно указать несколько раз)
 - `--target` — целевая папка
-- `--template` — шаблон папок (default: `2006/01/02`)
+- `--template` — шаблон папок (default: `2006-01-02`)
 - `--live-photos` — группировать Live Photos (default: `true`)
 - `--include-video` — обрабатывать видео (default: `true`)
 - `--dry-run` — пробный прогон (default: `true`)

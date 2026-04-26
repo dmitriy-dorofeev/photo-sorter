@@ -135,7 +135,7 @@ func (m Model) logCopyResult() {
 	}
 	defer l.Close()
 
-	l.Log(fmt.Sprintf("Source: %s", m.Source))
+	l.Log(fmt.Sprintf("Sources: %s", strings.Join(m.Sources, ", ")))
 	l.Log(fmt.Sprintf("Target: %s", m.Target))
 	l.Log(fmt.Sprintf("Files found: %d", len(m.files)))
 	l.Log(fmt.Sprintf("Copied: %d", m.copy.stats.Copied))
