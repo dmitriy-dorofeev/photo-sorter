@@ -52,11 +52,78 @@ exiftool -ver
 
 ## Сборка
 
+### Быстрая сборка (Makefile)
+
 ```bash
 git clone <repo>
 cd photo-sorter
-go build -o photo-sorter cmd/main.go
+make build
 ```
+
+Результат появится в `bin/photo-sorter`. Версия автоматически подставится из текущего git-тега или хеша коммита.
+
+### Вручную через go build
+
+```bash
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter cmd/main.go
+```
+
+> Флаг `-ldflags "-X main.version=..."` встраивает версию в бинарник. Без него приложение сообщит версию `dev`.
+
+## Версионирование и релизы
+
+Проект следует [Semantic Versioning](https://semver.org/lang/ru/): `vMAJOR.MINOR.PATCH`.
+
+### Как посмотреть версию
+
+```bash
+./photo-sorter --version
+```
+
+### Как выпустить новый релиз
+
+Релизы создаются автоматически при пуше git-тега, начинающегося на `v`:
+
+```bash
+# 1. Обновите CHANGELOG или ROADMAP (по желанию)
+# 2. Создайте и запушьте тег
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+GitHub Actions запустит [GoReleaser](https://goreleaser.com/), который:
+- соберёт бинарники для **macOS** (Intel + Apple Silicon) и **Linux** (x86_64 + ARM64);
+- упакует их в архивы `.tar.gz`;
+- сгенерирует файл контрольных сумм `checksums.txt`;
+- создаст страницу Release на GitHub с changelog.
+
+### Где скачать готовые артефакты
+
+Готовые бинарники доступны на странице **Releases** репозитория:
+```
+https://github.com/dmitriy-dorofeev/photo-sorter/releases
+```
+
+Выберите последний релиз, скачайте архив под свою платформу и распакуйте:
+
+```bash
+# Пример для macOS Apple Silicon
+curl -LO https://github.com/dmitriy-dorofeev/photo-sorter/releases/download/v1.0.0/photo-sorter_v1.0.0_Darwin_arm64.tar.gz
+tar -xzf photo-sorter_v1.0.0_Darwin_arm64.tar.gz
+./photo-sorter --version
+```
+
+> **Windows не поддерживается** в готовых сборках из-за использования системных вызовов `unix.Statfs` (можно собрать вручную с адаптацией).
+
+### Локальная сборка snapshot (без публикации)
+
+Если хотите проверить, как будет выглядеть релиз, не публикуя его:
+
+```bash
+make snapshot
+```
+
+Требуется установленный [GoReleaser](https://goreleaser.com/install/). Артефакты появятся в папке `dist/`.
 
 ## Тестирование
 
@@ -120,6 +187,7 @@ go test -v ./...
 - `--dry-run` — пробный прогон (default: `true`)
 - `--use-mtime` — fallback на дату изменения (default: `false`)
 - `--format` — формат отчёта: `text` или `json` (default: `text`)
+- `--version` — показать версию приложения и выйти
 
 ### Первый запуск на реальных данных
 

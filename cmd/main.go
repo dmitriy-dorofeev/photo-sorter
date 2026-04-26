@@ -15,6 +15,10 @@ import (
 	"photo-sorter/tui"
 )
 
+// version встраивается при сборке через -ldflags.
+// По умолчанию "dev" для локальной разработки.
+var version = "dev"
+
 // stringSlice реализует flag.Value для repeatable флага --source.
 type stringSlice []string
 
@@ -57,6 +61,7 @@ func main() {
 		useMTime     bool
 		format       string
 		useTUI       bool
+		versionFlag  bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -68,6 +73,7 @@ func main() {
 	flag.BoolVar(&useMTime, "use-mtime", false, "Fallback на дату изменения файла")
 	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
+	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -88,6 +94,7 @@ func main() {
 
 Вывод:
   --format string      Формат отчёта: text | json (default: "text")
+  --version            Показать версию и выйти
 
 Примеры:
   photo-sorter --source ./photos --target ./sorted
@@ -97,6 +104,11 @@ func main() {
 	}
 
 	flag.Parse()
+
+	if versionFlag {
+		fmt.Println(version)
+		os.Exit(0)
+	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
 	if useTUI && len(sources) == 0 && target == "" {

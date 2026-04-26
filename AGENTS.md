@@ -81,8 +81,14 @@ photo-sorter/
 ### Команды
 
 ```bash
-# Сборка бинарника
-go build -o photo-sorter cmd/main.go
+# Сборка бинарника (через Makefile, с встраиванием версии)
+make build
+
+# Или вручную с указанием версии
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter cmd/main.go
+
+# Проверка версии
+./photo-sorter --version
 
 # Запуск в TUI-режиме (по умолчанию)
 ./photo-sorter
@@ -100,7 +106,12 @@ go test ./internal/dateresolver/
 
 # Запуск E2E-теста
 go test ./internal/ -run TestEndToEnd -v
+go test ./internal/ -run TestEndToEnd_UseModTime -v
+go test ./internal/ -run TestCancellation -v
 go test ./cmd/ -run TestCLI -v
+
+# Локальная сборка релиза (snapshot) без публикации
+make snapshot
 ```
 
 ### Навигация в TUI
