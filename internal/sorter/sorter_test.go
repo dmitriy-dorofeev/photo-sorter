@@ -20,7 +20,7 @@ func TestBuildTree_Basic(t *testing.T) {
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		return date(2024, 3, 15), true
 	}
 
@@ -40,7 +40,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 		{Path: "/src/unknown.bin", Name: "unknown.bin", Ext: ".bin"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		return time.Time{}, false
 	}
 
@@ -58,7 +58,7 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 		{Path: "/src/dup.jpg", Name: "dup.jpg"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		return date(2024, 1, 1), true
 	}
 
@@ -88,7 +88,7 @@ func TestBuildTree_NameCollision(t *testing.T) {
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		return date(2024, 1, 1), true
 	}
 
@@ -111,7 +111,7 @@ func TestBuildTree_LivePhotos(t *testing.T) {
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		if f.Ext == ".heic" {
 			return date(2024, 5, 20), true
 		}
@@ -138,7 +138,7 @@ func TestBuildTree_LivePhotosDisabled(t *testing.T) {
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
 	}
 
-	resolve := func(f scanner.FileInfo) (time.Time, bool) {
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
 		if f.Ext == ".heic" {
 			return date(2024, 5, 20), true
 		}

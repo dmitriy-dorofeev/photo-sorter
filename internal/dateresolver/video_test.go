@@ -1,6 +1,7 @@
 package dateresolver
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -34,7 +35,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2024:06:15 10:20:30"}]'
 `
 	fake := writeFakeExifTool(t, script)
 
-	got, ok := extractVideoDate("/fake/video.mp4", fake)
+	got, ok := extractVideoDate(context.Background(), "/fake/video.mp4", fake)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -51,7 +52,7 @@ echo '[{"SourceFile":"'$3'","DateTimeOriginal":"2023:01:01 00:00:01","CreateDate
 `
 	fake := writeFakeExifTool(t, script)
 
-	got, ok := extractVideoDate("/fake/video.mp4", fake)
+	got, ok := extractVideoDate(context.Background(), "/fake/video.mp4", fake)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -67,7 +68,7 @@ echo '[{"SourceFile":"'$3'","MediaCreateDate":"2022:05:05 12:00:00"}]'
 `
 	fake := writeFakeExifTool(t, script)
 
-	got, ok := extractVideoDate("/fake/video.mp4", fake)
+	got, ok := extractVideoDate(context.Background(), "/fake/video.mp4", fake)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -83,14 +84,14 @@ echo '[{"SourceFile":"'$3'"}]'
 `
 	fake := writeFakeExifTool(t, script)
 
-	_, ok := extractVideoDate("/fake/video.mp4", fake)
+	_, ok := extractVideoDate(context.Background(), "/fake/video.mp4", fake)
 	if ok {
 		t.Fatal("expected ok=false when no date fields present")
 	}
 }
 
 func TestExtractVideoDate_NotFound(t *testing.T) {
-	_, ok := extractVideoDate("/fake/video.mp4", "/nonexistent/exiftool")
+	_, ok := extractVideoDate(context.Background(), "/fake/video.mp4", "/nonexistent/exiftool")
 	if ok {
 		t.Fatal("expected ok=false when exiftool not found")
 	}
@@ -102,7 +103,7 @@ echo 'not json'
 `
 	fake := writeFakeExifTool(t, script)
 
-	_, ok := extractVideoDate("/fake/video.mp4", fake)
+	_, ok := extractVideoDate(context.Background(), "/fake/video.mp4", fake)
 	if ok {
 		t.Fatal("expected ok=false when exiftool returns invalid JSON")
 	}
@@ -115,7 +116,7 @@ echo '[{"SourceFile":"'$5'","CreateDate":"2024:06:15 10:20:30"}]'
 `
 	fake := writeFakeExifTool(t, script)
 
-	got, ok := extractVideoDate("-overwrite_original.mp4", fake)
+	got, ok := extractVideoDate(context.Background(), "-overwrite_original.mp4", fake)
 	if !ok {
 		t.Fatal("expected ok=true even for path starting with dash")
 	}
@@ -141,7 +142,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2021:07:07 07:07:07"}]'
 		ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	got, ok := r.Resolve(f)
+	got, ok := r.Resolve(context.Background(), f)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -166,7 +167,7 @@ echo '[{"SourceFile":"'$3'"}]'
 		ModTime: time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
 
-	got, ok := r.Resolve(f)
+	got, ok := r.Resolve(context.Background(), f)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -191,7 +192,7 @@ echo '[{"SourceFile":"'$3'"}]'
 		ModTime: time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
 	}
 
-	got, ok := r.Resolve(f)
+	got, ok := r.Resolve(context.Background(), f)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}

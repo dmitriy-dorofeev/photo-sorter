@@ -54,7 +54,8 @@ type Model struct {
 	copyTotal    *atomic.Int64
 
 	// Сканирование
-	scanCancel context.CancelFunc
+	scanCancel     context.CancelFunc
+	scanGeneration int
 
 	// Версия и обновление
 	version      string

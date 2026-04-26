@@ -55,7 +55,7 @@ func (s *Sorter) BuildTree(
 	ctx context.Context,
 	files []scanner.FileInfo,
 	duplicates []deduper.Result,
-	resolveDate func(scanner.FileInfo) (time.Time, bool),
+	resolveDate func(context.Context, scanner.FileInfo) (time.Time, bool),
 ) []Entry {
 	// 1. Множество путей-дубликатов.
 	dupPaths := make(map[string]struct{})
@@ -77,7 +77,7 @@ func (s *Sorter) BuildTree(
 		if ctx.Err() != nil {
 			break
 		}
-		d, ok := resolveDate(f)
+		d, ok := resolveDate(ctx, f)
 		dateCache[f.Path] = dateResult{date: d, ok: ok}
 		if ok && s.livePhotos {
 			ext := strings.ToLower(f.Ext)

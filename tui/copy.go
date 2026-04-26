@@ -58,24 +58,13 @@ func (m Model) startCopy() tea.Cmd {
 
 	dryRun := false
 
-	type result struct {
-		stats copier.Stats
-		err   error
-	}
-	ch := make(chan result, 1)
-
-	go func() {
+	return func() tea.Msg {
 		c := copier.New(dryRun, m.Target)
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
 			m.copyProgress.Store(int64(cur))
 			m.copyTotal.Store(int64(tot))
 		})
-		ch <- result{stats: stats, err: err}
-	}()
-
-	return func() tea.Msg {
-		res := <-ch
-		return copyDoneMsg{stats: res.stats, err: res.err}
+		return copyDoneMsg{stats: stats, err: err}
 	}
 }
 

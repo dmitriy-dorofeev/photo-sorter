@@ -108,8 +108,8 @@ func (c *Copier) Copy(
 					continue
 				}
 			} else {
-				hSrc, err1 := hasher.HashFile(e.Source.Path)
-				hDst, err2 := hasher.HashFile(target)
+				hSrc, err1 := hasher.HashFile(ctx, e.Source.Path)
+				hDst, err2 := hasher.HashFile(ctx, target)
 				if err1 == nil && err2 == nil && hSrc == hDst {
 					stats.Skipped++
 					consecutiveErrors = 0

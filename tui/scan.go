@@ -24,6 +24,7 @@ type scanResultMsg struct {
 	duplicates []deduper.Result
 	entries    []sorter.Entry
 	err        error
+	generation int
 }
 
 // runnerProgressMsg передаёт прогресс из runner.Run в TUI.
@@ -113,6 +114,8 @@ func (m Model) startScan() tea.Cmd {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	m.scanCancel = cancel
+	m.scanGeneration++
+	gen := m.scanGeneration
 
 	progressCh := m.scan.progressCh
 
@@ -130,13 +133,14 @@ func (m Model) startScan() tea.Cmd {
 			close(progressCh)
 		}
 		if err != nil {
-			return scanResultMsg{err: err}
+			return scanResultMsg{err: err, generation: gen}
 		}
 
 		return scanResultMsg{
 			files:      res.Files,
 			duplicates: res.Duplicates,
 			entries:    res.Entries,
+			generation: gen,
 		}
 	}
 }
@@ -186,7 +190,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, scanTickCmd()
 
 	case scanResultMsg:
-		if m.scan.aborted {
+		if m.scan.aborted || msg.generation != m.scanGeneration {
 			return m, nil
 		}
 		m.scan.running = false

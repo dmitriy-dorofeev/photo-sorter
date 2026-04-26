@@ -1,6 +1,7 @@
 package dateresolver
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,7 +160,7 @@ func TestResolve_Priority(t *testing.T) {
 			Ext:     ".jpg",
 		}
 
-		got, ok := r.Resolve(f)
+		got, ok := r.Resolve(context.Background(), f)
 		if !ok {
 			t.Fatal("expected date")
 		}
@@ -179,7 +180,7 @@ func TestResolve_Priority(t *testing.T) {
 			Ext:     ".jpg",
 		}
 
-		got, ok := r.Resolve(f)
+		got, ok := r.Resolve(context.Background(), f)
 		if !ok {
 			t.Fatal("expected mtime fallback")
 		}
@@ -198,7 +199,7 @@ func TestResolve_Priority(t *testing.T) {
 			Ext:     ".jpg",
 		}
 
-		_, ok := r.Resolve(f)
+		_, ok := r.Resolve(context.Background(), f)
 		if ok {
 			t.Fatal("expected false when UseModTime is false and no EXIF/filename date")
 		}
@@ -213,7 +214,7 @@ func TestResolve_Priority(t *testing.T) {
 			Ext:     ".jpg",
 		}
 
-		_, ok := r.Resolve(f)
+		_, ok := r.Resolve(context.Background(), f)
 		if ok {
 			t.Fatal("expected false when no date source available")
 		}
@@ -233,7 +234,7 @@ echo '[{"CreateDate":"2023:07:07 07:07:07"}]'
 `
 	os.WriteFile(fakeExifTool, []byte(script), 0755)
 
-	got, ok := extractVideoDate(movPath, fakeExifTool)
+	got, ok := extractVideoDate(context.Background(), movPath, fakeExifTool)
 	if !ok {
 		t.Fatal("expected date from file with leading dash")
 	}
@@ -264,7 +265,7 @@ func TestExtractVideoDate_Timeout(t *testing.T) {
 	}
 
 	start := time.Now()
-	_, ok := extractVideoDate(movPath, fakeBin)
+	_, ok := extractVideoDate(context.Background(), movPath, fakeBin)
 	elapsed := time.Since(start)
 	if ok {
 		t.Fatal("expected false on timeout")
@@ -292,7 +293,7 @@ echo '[{"CreateDate":"2023:07:07 07:07:07"}]'
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, ok := extractVideoDate(movPath, fakeExifTool)
+			_, ok := extractVideoDate(context.Background(), movPath, fakeExifTool)
 			if !ok {
 				t.Error("expected date from concurrent call")
 			}
@@ -322,6 +323,6 @@ func FuzzResolveDate(f *testing.F) {
 		}
 		// Для несуществующих файлов EXIF не прочитается, но Resolve
 		// должен корректно обработать любое имя без паники.
-		_, _ = r.Resolve(fi)
+		_, _ = r.Resolve(context.Background(), fi)
 	})
 }

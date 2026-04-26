@@ -8,59 +8,314 @@
 
 ## Содержание
 
-1. [Тестирование](#1-тестирование)
+1. [Конкурентность и стабильность](#1-конкурентность-и-стабильность)
+2. [Безопасность](#2-безопасность)
+3. [Надёжность и отказоустойчивость](#3-надёжность-и-отказоустойчивость)
+4. [TUI — состояние, UX, производительность](#4-tui--состояние-ux-производительность)
+5. [CLI и updater](#5-cli-и-updater)
+6. [Тесты и тестовые данные](#6-тесты-и-тестовые-данные)
+7. [Качество кода и архитектура](#7-качество-кода-и-архитектура)
 
 ---
 
-## 1. Тестирование
+## 1. Конкурентность и стабильность
 
-**Статус: полностью выполнен.**
+**Статус: ✅ Выполнено.**
 
-### Выполненные работы
+---
 
-- **1.1 Пакет `logger`** — добавлен `internal/logger/logger_test.go`:
-  - `TestNew_Error` — ошибки создания (несуществующая директория, путь = директория).
-  - `TestLog` — корректность записи и формата.
-  - `TestLog_Concurrent` — 100 горутин, race-free.
-  - `TestLog_AfterClose` — ошибка записи после `Close`.
+## 2. Безопасность
 
-- **1.2 `internal/scanner`** — дополнен `internal/scanner/scanner_test.go`:
-  - `TestScan_NonExistentSource` — ошибка для несуществующего source.
-  - `TestScan_EmptyDir` — пустая директория возвращает 0 файлов.
-  - `TestScan_PermissionDenied` — пропуск заблокированной поддиректории.
-  - `TestScan_Symlink` — symlink обрабатывается как отдельный файл (размер ссылки).
-  - `TestScan_ContextCancel` — отмена контекста возвращает ошибку.
-  - `TestScan_ManyFiles` — performance на 500 файлах.
-  - **Исправлен баг в `scanner.go`**: ошибка на корневом пути теперь прокидывается (`path == src`), а не игнорируется.
+### 2.1 🔴 TOCTOU в `copier.Copy` — race между проверкой и записью
+**Файл:** `internal/copier/copier.go:100-131`  
+**Проблема:** между `os.Lstat(target)` + `hasher.HashFile(target)` + `findFreeName(target)` и финальным `copyFile` + `os.Rename` злоумышленник (или другой процесс) может подменить целевой файл. `copyFile` удаляет symlink перед `Rename`, но регулярный файл, созданный после `findFreeName`, будет атомарно перезаписан.
 
-- **1.3 `internal/deduper`** — дополнен `internal/deduper/deduper_test.go`:
-  - `TestFindDuplicates_HashError` — `permission denied` при хешировании (одинаковый размер, чтобы попасть в группу).
-  - `TestFindDuplicates_NamedPipe` — хеширование FIFO возвращает ошибку.
+**Исправление:** в `copyFile` после `os.CreateTemp` проверять, что `dst` не появился заново до `os.Rename`. Или открывать `dst` с `O_EXCL` на POSIX (создаётся только если не существует).
 
-- **1.4 `internal/dateresolver`** — дополнен `internal/dateresolver/dateresolver_test.go`:
-  - `TestExtractVideoDate_CommandInjection` — файл с именем `-test.mov`, защита через `--`.
-  - `TestExtractVideoDate_Timeout` — fake exiftool, который спит; проверка прерывания.
-  - `TestExtractVideoDate_Concurrent` — 20 параллельных вызовов без паники.
-  - **Исправлено в `video.go`**: `videoTimeout` вынесена в package-level переменную для переопределения в тестах.
+### 2.2 🟡 TOCTOU в `hasher.HashFile`
+**Файл:** `internal/hasher/hasher.go:16-24`  
+**Проблема:** между `os.Lstat` (проверка на regular file) и `os.Open` злоумышленник может заменить файл на symlink.
 
-- **1.5 `internal/copier`** — дополнен `internal/copier/copier_test.go`:
-  - `TestCopy_PathTraversal` — обнаружение `../` в target.
-  - `TestCopy_SymlinkAttack` — symlink удаляется, victim не перезаписывается.
-  - `TestCopy_NotEnoughDiskSpace` — mock `spaceFunc`, возвращающий 1 байт.
-  - `TestCopy_ContextCancelMidway` — отмена через progress callback после первого файла.
-  - **Исправлено в `copier.go`**: `spaceFunc` вынесена в поле `Copier` для мокирования.
+**Исправление:** открывать файл с `O_NOFOLLOW` на Unix; либо после `Open` делать `f.Stat()` и повторно проверять `IsRegular()`.
 
-- **1.6 `cmd/main_test.go`** — исправлена хрупкая проверка `dry-run`:
-  - `filepath.Glob(targetDir, "*")` заменён на `filepath.WalkDir` для рекурсивной проверки отсутствия файлов.
+### 2.3 🟡 Symlink/FIFO в source дереве ломает весь pipeline
+**Файл:** `internal/scanner/scanner.go` → `internal/deduper/deduper.go`  
+**Проблема:** scanner не проверяет `d.Type().IsRegular()` и включает symlink/FIFO в список. Deduper при хешировании получает ошибку `not a regular file` и **прерывает всю дедупликацию** одним файлом.
 
-- **1.7 Benchmark и fuzz** — добавлены:
-  - `internal/hasher/hasher_test.go`: `BenchmarkHashFile` (10 MB файл).
-  - `internal/deduper/deduper_test.go`: `BenchmarkFindDuplicates` (100 файлов, 50 пар дубликатов).
-  - `internal/dateresolver/dateresolver_test.go`: `FuzzResolveDate` (фаззинг `Resolve` с разными именами и расширениями).
+**Исправление:** в scanner пропускать `!d.Type().IsRegular()`. Или в deduper обрабатывать hash-ошибки как `skip` файла, а не `return nil, err`.
 
-- **1.8 `internal/integration_test.go`** — убрана завязка на точное число файлов:
-  - Добавлен хелпер `countFilesWithExts`, который считает файлы динамически по расширениям.
-  - `TestCLIJSON` проверяет `FilesFound > 0` вместо жёсткого `!= 12`.
+### 2.4 🟡 Target создаётся с правами 0755
+**Файл:** `cmd/main.go:151`  
+**Проблема:** `os.MkdirAll(target, 0755)` делает папку читаемой всеми. Если target содержит личные фото, это раскрытие данных.
+
+**Исправление:** использовать `0750` (владелец + группа) или `0700`.
+
+### 2.5 🟡 Path traversal validation bypass при пустом `targetRoot`
+**Файл:** `internal/copier/copier.go:82-88`  
+**Проблема:** если `Copier` создан не через `New()` (а напрямую `&Copier{}`), `targetRoot` может быть пустым, и `validateTargetPath` пропускается.
+
+**Исправение:** в `Copy` вызывать `validateTargetPath` всегда, если `targetRoot != ""`; или инициализировать `targetRoot` через конструктор и запрещать zero-value использование.
+
+### 2.6 🟡 Self-copy: `source == target` не проверяется
+**Файл:** `cmd/main.go`  
+**Проблема:** если source вложен в target (или совпадает с ним), программа может читать файлы, которые одновременно пишет, что приводит к бесконечной рекурсии или повреждению данных.
+
+**Исправение:** после `filepath.Abs()` для всех source и target проверять, что target не является префиксом ни одного source.
+
+---
+
+## 3. Надёжность и отказоустойчивость
+
+### 3.1 🔴 Self-update падает при cross-device rename (`EXDEV`)
+**Файл:** `cmd/update.go:248`  
+**Проблема:** `os.Rename(newBin, execPath)` падает, если `/tmp` (tmpfs) и бинарник на разных физических дисках. Это стандартная конфигурация Linux.
+
+**Исправение:** реализовать `copyFile` + `os.Rename` в рамках одной файловой системы (или использовать `io.Copy` в целевой файл, затем `os.Rename` внутри одного каталога).
+
+### 3.2 🔴 GitHub API требует `User-Agent`
+**Файл:** `cmd/update.go:148`, `internal/updater/updater.go:72`  
+**Проблема:** запросы к `api.github.com` без заголовка `User-Agent` могут возвращать `403 Forbidden`. Функции `check-update` и `update` могут быть полностью неработоспособны.
+
+**Исправение:** добавить `req.Header.Set("User-Agent", "photo-sorter/"+version)`.
+
+### 3.3 🟡 Logger теряет данные — `Sync()` error игнорируется
+**Файл:** `internal/logger/logger.go:28`  
+**Проблема:** если диск полон или произошёл I/O error, `l.file.Sync()` вернёт ошибку, но caller получит только `Close()` error и не узнает, что логи потеряны.
+
+**Исправение:** возвращать обе ошибки через `errors.Join`:
+```go
+syncErr := l.file.Sync()
+closeErr := l.file.Close()
+return errors.Join(syncErr, closeErr)
+```
+
+### 3.4 🟡 Single hash failure aborts entire dedup
+**Файл:** `internal/deduper/deduper.go:71-74`  
+**Проблема:** один файл, удалённый или ставший недоступным между scan и dedup, ломает всю операцию.
+
+**Исправение:** при `hash error` помечать файл как "unhashable" и пропускать его (не включать в результаты), а не возвращать ошибку из всей функции.
+
+### 3.5 🟡 Scanner молча пропускает недоступные файлы
+**Файл:** `internal/scanner/scanner.go:55-64`, `75-77`  
+**Проблема:** permission error на файле возвращает `nil` (пропуск). Пользователь никогда не узнает, что часть фото не была обработана.
+
+**Исправение:** собирать список пропущенных файлов в `Scanner` и возвращать его вместе с результатами (или логировать в `runner`).
+
+### 3.6 🟡 `shouldAbort` ошибочно диагностирует target disk
+**Файл:** `internal/copier/copier.go:177-193`  
+**Проблема:** после 3 ошибок подряд проверяется `targetRoot`, но ошибки могли быть на **source** (например, файл удалён во время копирования). Программа аварийно завершается с сообщением "target disk unavailable".
+
+**Исправение:** разделить счётчики ошибок source и target, или анализировать ошибку (`os.IsNotExist` для source vs `os.IsPermission` для target).
+
+### 3.7 🟡 `syncDir` только на root, поддиректории не синхронизируются
+**Файл:** `internal/copier/copier.go:149-150`  
+**Проблема:** если система упадёт сразу после копирования, метаданные вложенных папок (`2024/03/15`) могут не быть записаны на диск.
+
+**Исправение:** синхронизировать каждую созданную поддиректорию (сохранять множество `syncDirs` и вызывать `syncDir` для каждой).
+
+### 3.8 🟡 Нет валидации шаблона даты
+**Файл:** `internal/runner/runner.go:91`  
+**Проблема:** шаблон `"YYYY-MM-DD"` не является валидным Go time layout. `date.Format` создаст папки вида `%!Y(MISSING)-%!M(MISSING)-%!D(MISSING)`.
+
+**Исправение:** в `runner.Run` или `Config` валидировать template через `time.Now().Format(cfg.Template)` и проверять, что результат не содержит `%!`.
+
+### 3.9 🟡 Copier target writability check игнорирует `Close()` error
+**Файл:** `cmd/main.go:160`  
+**Проблема:** `tmpFile.Close()` возвращает ошибку (диск полон, flaky сеть), но она игнорируется.
+
+**Исправение:** проверять ошибку `Close()`.
+
+---
+
+## 4. TUI — состояние, UX, производительность
+
+### 4.1 🔴 `updateCheckMsg` теряется вне экрана Sources
+**Файл:** `tui/sources.go:37`  
+**Проблема:** сообщение об обновлении обрабатывается только в `updateSources`. Если пользователь ушёл с экрана до завершения сетевого запроса, результат теряется навсегда.
+
+**Исправение:** обрабатывать `updateCheckMsg` в глобальном `Update` (`model.go`) или сохранять `m.updateResult` независимо от текущего экрана.
+
+### 4.2 🟡 Частичная статистика теряется при ошибке копирования
+**Файл:** `tui/copy.go:92-103`  
+**Проблема:** если `copier.Copy` вернул ошибку после частичного копирования (например, кончилось место), `msg.stats` не сохраняется. В лог попадают нули.
+
+**Исправение:** всегда сохранять `m.copy.stats = msg.stats`, а ошибку записывать отдельно.
+
+### 4.3 🟡 `scanTickCmd` бесполезен и создаёт лишние горутины
+**Файл:** `tui/scan.go:36-40`  
+**Проблема:** тик каждые 200 мс не меняет состояние и не анимирует ничего (прогресс приходит через `runnerProgressMsg`). Создаёт сотни бесполезных горутин при длительном сканировании.
+
+**Исправение:** удалить `scanTickCmd` и всю связанную логику.
+
+### 4.4 🟡 `scanStageDone` не отображает имя этапа
+**Файл:** `tui/scan.go:268-270`  
+**Проблема:** `scanStageNames` длиной 4, `scanStageDone = 4`, условие `int(m.scan.stage) < len(scanStageNames)` ложно. Под прогресс-баром в финале пустая строка вместо "Готово".
+
+**Исправение:** добавить `"Готово"` в `scanStageNames` или обрабатывать `scanStageDone` отдельно.
+
+### 4.5 🟡 Нет обработки `tea.WindowSizeMsg` на 4 экранах
+**Файл:** `settings.go`, `scan.go`, `preview.go`, `copy.go`  
+**Проблема:** только `sources.go` и `target.go` реагируют на изменение размера терминала. Длинные пути и ошибки обрезаются.
+
+**Исправение:** добавить case `tea.WindowSizeMsg` во все `updateXxx` или в глобальный `Update`.
+
+### 4.6 🟡 Жёсткая обрезка списков в Preview
+**Файл:** `tui/preview.go:54-90`  
+**Проблема:** захардкожены лимиты 15 папок и 5 дубликатов. На высоком терминале — пустое место, на низком — переполнение.
+
+**Исправение:** вычислять лимиты из `m.height` или убрать лимит с добавлением скролла.
+
+### 4.7 🟡 Недостижимая ветка в `viewCopy`
+**Файл:** `tui/copy.go:200-202`  
+**Проблема:** попасть на экран Copy можно только через Preview, где сразу вызывается `startCopy()`. Ветка `else` (не running и не done) никогда не выполняется.
+
+**Исправение:** удалить мёртвый код.
+
+### 4.8 🟡 `interface{}` + type assertion без `ok` в Settings
+**Файл:** `tui/settings.go:179`, `204`, `251`, `256`, `309`, `315`, `318`, `388`  
+**Проблема:** любой рефакторинг `setting.value` может привести к panic в runtime.
+
+**Исправение:** заменить на строгую типизацию (отдельные поля `stringValue` / `boolValue` и методы `AsString()` / `AsBool()` с проверкой `stype`).
+
+### 4.9 🟡 `panic` на неизвестном экране
+**Файл:** `tui/model.go:101`, `model.go:120`  
+**Проблема:** `default: panic(...)` в production-приложении недопустимо. Достаточно одного забытого case при добавлении нового экрана.
+
+**Исправение:** возвращать fallback-отрисовку с текстом ошибки и `tea.Quit`.
+
+### 4.10 🟢 `lipgloss.NewStyle()` внутри горячих циклов рендера
+**Файл:** `tui/settings.go:322`, `tui/preview.go:360`  
+**Проблема:** аллокации на каждый кадр.
+
+**Исправение:** вынести стили на уровень пакета (как сделано в `styles.go`).
+
+---
+
+## 5. CLI и updater
+
+### 5.1 🟡 CLI не ловит `Ctrl+C` / сигналы
+**Файл:** `cmd/main.go`  
+**Проблема:** `runner.Run` и `copier.Copy` принимают `context.Context`, но `main()` передаёт `context.Background()`. При `Ctrl+C` процесс убивается ОС, pipeline не завершается gracefully.
+
+**Исправение:** `signal.NotifyContext` для `SIGINT`/`SIGTERM`.
+
+### 5.2 🟡 `TestCLIHelp` сломан — Go flag возвращает exit 2
+**Файл:** `cmd/main_test.go:72-97`  
+**Проблема:** `flag.Parse()` при `--help` вызывает `flag.Usage()` и `os.Exit(2)`. Тест ожидает exit 0. На практике тест падает.
+
+**Исправение:** ожидать `ExitCode() == 2` или переопределить `flag.Usage` без `os.Exit`.
+
+### 5.3 🟡 `TestCLIVersion` хрупкий для release-версий
+**Файл:** `cmd/main_test.go:19`  
+**Проблема:** `!strings.Contains(output, "dev") && !strings.Contains(output, "v")` — версия `1.0.0` не содержит ни `"dev"`, ни `"v"`, тест упадёт.
+
+**Исправение:** проверять, что вывод не пуст и не является ошибкой, или матчить через regex.
+
+### 5.4 🟡 CLI-тесты крайне медленные — `go run` на каждый test case
+**Файл:** `cmd/main_test.go`  
+**Проблема:** каждый тест вызывает `exec.Command("go", "run", ".", ...)`, что запускает полную компиляцию. 10 тестов = 30–60 секунд.
+
+**Исправение:** собирать бинарник один раз (через `TestMain` или `sync.Once`) и переиспользовать.
+
+### 5.5 🟡 Updater: дублирование `fetchLatestRelease`
+**Файл:** `cmd/update.go:141-165`, `internal/updater/updater.go:65-89`  
+**Проблема:** две почти идентичные функции. Риск рассинхронизации при изменении API.
+
+**Исправение:** оставить одну реализацию в `internal/updater`, в `cmd` просто вызывать её.
+
+### 5.6 🟡 Updater: нет проверки целостности бинарника
+**Файл:** `cmd/update.go`  
+**Проблема:** скачанный tarball распаковывается и заменяет running executable без проверки checksum, signature, способности бинарника запускаться.
+
+**Исправение:** скачивать `checksums.txt` из релиза и сверять SHA256 перед заменой.
+
+---
+
+## 6. Тесты и тестовые данные
+
+### 6.1 🟡 Misleading fixture: `photo_no_date.jpg` содержит EXIF
+**Файл:** `testdata/e2e/source/2023/photo_no_date.jpg`  
+**Проблема:** файл byte-identical с `minimal.jpg` (506 B, реальный EXIF 2024-03-15). Имя и документация говорят "без даты", а на деле дата есть.
+
+**Исправение:** заменить на настоящий JPEG-болванку без EXIF-сегмента.
+
+### 6.2 🟡 Orphaned test file
+**Файл:** `testdata/e2e/source/root_photo.jpg`  
+**Проблема:** никакой тест не сканирует `e2e/source/` напрямую — все указывают на `source/2023/` или `source/2024/`.
+
+**Исправение:** удалить или переместить в `2023/` (там уже есть `root_photo.jpg`).
+
+### 6.3 🟡 `internal/hasher` — только benchmark, нет unit-тестов
+**Файл:** `internal/hasher/hasher_test.go`  
+**Проблема:** нет тестов на успешное хеширование, ошибку открытия, empty file, symlink rejection.
+
+**Исправение:** добавить `TestHashFile`, `TestHashFile_NotRegular`, `TestHashFile_Empty`.
+
+### 6.4 🟡 `tui` — полностью без тестов
+**Файл:** `tui/*.go`  
+**Проблема:** ~1700 строк TUI-логики не покрыты ни одним тестом.
+
+**Исправение:** добавить минимальный набор:
+- `TestNewModel` — начальное состояние.
+- `TestScreenTransitions` — переходы Sources → Target → Settings и обратно.
+- `TestSettingsValidation` — ввод невалидного шаблона.
+
+### 6.5 🟡 `TestCLIJSON` скрывает stderr
+**Файл:** `cmd/main_test.go:145`  
+**Проблема:** использует `cmd.Output()` вместо `cmd.CombinedOutput()`. Предупреждения и ошибки от runner теряются.
+
+**Исправение:** перейти на `CombinedOutput()`.
+
+---
+
+## 7. Качество кода и архитектура
+
+### 7.1 🟡 `main()` — god function 170+ строк
+**Файл:** `cmd/main.go:54-225`  
+**Проблема:** flag parsing, validation, orchestration, reporting — всё в одной функции.
+
+**Исправение:** выделить `runTUI()`, `runCLI()`, `validateInputs()`.
+
+### 7.2 🟡 `sort` переменная затеняет пакет `sort`
+**Файл:** `internal/runner/runner.go:91`  
+**Проблема:** `sort := sorter.New(...)`.
+
+**Исправение:** переименовать в `srt` или `sorterInstance`.
+
+### 7.3 🟡 `scanStageDates` — мёртвый enum
+**Файл:** `tui/scan.go:65`  
+**Проблема:** значение есть, но `runner.Run` не отправляет stage `"dates"`, и в `updateScan` нет case для него.
+
+**Исправение:** либо добавить прогресс из `dateresolver`, либо удалить.
+
+### 7.4 🟡 `selectedItem()` — мёртвый код
+**Файл:** `tui/dirbrowser.go:124-129`  
+**Проблема:** нигде не вызывается.
+
+**Исправение:** удалить.
+
+### 7.5 🟡 Progress callback interleaving в JSON mode
+**Файл:** `cmd/main.go:198-200`  
+**Проблема:** `runner.Run` пишет прогресс в `os.Stderr`. Инструменты, мёржущие stdout+stderr, получат перемешанный JSON и текст.
+
+**Исправение:** подавлять progress callback при `format == "json"`.
+
+### 7.6 🟡 `findPreset` делает два цикла
+**Файл:** `tui/settings.go:33-46`  
+**Проблема:** O(2n) вместо O(n).
+
+**Исправение:** один цикл с отслеживанием индекса custom-пресета.
+
+---
+
+## Приоритетная матрица
+
+| Приоритет | Количество | Ключевые пункты |
+|-----------|------------|-----------------|
+| **P0 — Critical** | 4 | 1.1 (race scanner), 1.2 (race TUI scan), 2.1 (TOCTOU copier), 3.1 (updater EXDEV) |
+| **P1 — High** | 6 | 1.3 (TUI goroutine deadlock), 1.4 (ctx в хешировании), 2.3 (symlink abort), 2.6 (self-copy), 3.2 (User-Agent), 3.4 (hash abort) |
+| **P2 — Medium** | 12 | 1.5 (ResolveBatch ctx), 2.2 (hasher TOCTOU), 2.4 (perms 0755), 3.3 (logger Sync), 3.5 (silent skip), 3.6 (shouldAbort), 3.8 (template validation), 4.1 (updateCheckMsg), 4.2 (partial stats), 5.1 (signals), 5.2 (TestCLIHelp), 6.1 (photo_no_date) |
+| **P3 — Low** | 15 | Остальные: UX, dead code, style, тесты TUI, performance |
 
 ---
 

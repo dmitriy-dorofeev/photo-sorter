@@ -1,6 +1,7 @@
 package hasher
 
 import (
+	"context"
 	"crypto/rand"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ func BenchmarkHashFile(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := HashFile(path)
+		_, err := HashFile(context.Background(), path)
 		if err != nil {
 			b.Fatal(err)
 		}

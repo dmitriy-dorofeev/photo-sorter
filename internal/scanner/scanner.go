@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -45,6 +46,7 @@ func New(sources []string, exts ...string) *Scanner {
 // Обход нескольких папок выполняется параллельно через errgroup.
 func (s *Scanner) Scan(ctx context.Context) ([]FileInfo, error) {
 	files := make([]FileInfo, 0, 1024)
+	var mu sync.Mutex
 	g, ctx := errgroup.WithContext(ctx)
 
 	for _, src := range s.sources {
@@ -92,7 +94,9 @@ func (s *Scanner) Scan(ctx context.Context) ([]FileInfo, error) {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
+				mu.Lock()
 				files = append(files, local...)
+				mu.Unlock()
 				return nil
 			}
 		})

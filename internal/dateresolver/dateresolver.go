@@ -3,6 +3,7 @@
 package dateresolver
 
 import (
+	"context"
 	"photo-sorter/internal/scanner"
 	"time"
 )
@@ -27,7 +28,8 @@ func New() *Resolver {
 
 // ResolveBatch предварительно извлекает даты для всех видео-файлов
 // одним вызовом exiftool. Результат кэшируется внутри Resolver.
-func (r *Resolver) ResolveBatch(files []scanner.FileInfo) {
+// Поддерживает отмену через ctx.
+func (r *Resolver) ResolveBatch(ctx context.Context, files []scanner.FileInfo) {
 	var videoFiles []scanner.FileInfo
 	for _, f := range files {
 		if isVideo(f.Ext) {
@@ -37,7 +39,7 @@ func (r *Resolver) ResolveBatch(files []scanner.FileInfo) {
 	if len(videoFiles) == 0 {
 		return
 	}
-	r.videoCache = extractVideoDates(videoFiles, r.ExifToolPath)
+	r.videoCache = extractVideoDates(ctx, videoFiles, r.ExifToolPath)
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.
@@ -48,7 +50,8 @@ func (r *Resolver) ResolveBatch(files []scanner.FileInfo) {
 //  4. ModTime файла (только если UseModTime == true).
 //
 // Если дата не определена ни одним способом — возвращает (_, false).
-func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
+// ctx используется для прерывания вызова exiftool в fallback-сценарии.
+func (r *Resolver) Resolve(ctx context.Context, f scanner.FileInfo) (time.Time, bool) {
 	// 1. EXIF для JPEG.
 	if isJPEG(f.Ext) {
 		if t, ok := extractExifDate(f.Path); ok {
@@ -61,7 +64,7 @@ func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
 		if t, ok := r.videoCache[f.Path]; ok {
 			return t, true
 		}
-		if t, ok := extractVideoDate(f.Path, r.ExifToolPath); ok {
+		if t, ok := extractVideoDate(ctx, f.Path, r.ExifToolPath); ok {
 			return t, true
 		}
 	}

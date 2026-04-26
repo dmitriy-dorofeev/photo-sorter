@@ -2,6 +2,7 @@
 package hasher
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,8 @@ import (
 // HashFile вычисляет xxhash для содержимого файла.
 // Перед открытием проверяет, что файл — обычный (не FIFO, не symlink и т.д.).
 // Чтение потоковое — подходит для файлов любого размера.
-func HashFile(path string) (uint64, error) {
+// Проверяет ctx.Err() между блоками чтения, позволяя прервать хеширование больших файлов.
+func HashFile(ctx context.Context, path string) (uint64, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return 0, err
@@ -31,6 +33,9 @@ func HashFile(path string) (uint64, error) {
 	buf := make([]byte, 64*1024)
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
 		n, err := f.Read(buf)
 		if n > 0 {
 			_, _ = h.Write(buf[:n])

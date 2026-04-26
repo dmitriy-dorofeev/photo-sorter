@@ -26,12 +26,13 @@ func isVideo(ext string) bool {
 // extractVideoDate пытается извлечь дату съёмки из видео-файла через exiftool.
 // Приоритет полей: DateTimeOriginal → CreateDate → MediaCreateDate.
 // Если exiftool не найден или произошла любая ошибка — возвращает (_, false).
-func extractVideoDate(path, exifToolPath string) (time.Time, bool) {
+// Поддерживает отмену через ctx.
+func extractVideoDate(ctx context.Context, path, exifToolPath string) (time.Time, bool) {
 	if exifToolPath == "" {
 		exifToolPath = "exiftool"
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), videoTimeout)
+	ctx, cancel := context.WithTimeout(ctx, videoTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, exifToolPath,
@@ -66,7 +67,8 @@ func extractVideoDate(path, exifToolPath string) (time.Time, bool) {
 
 // extractVideoDates извлекает даты для нескольких видео-файлов одним
 // вызовом exiftool. Возвращает мапу путь → время.
-func extractVideoDates(files []scanner.FileInfo, exifToolPath string) map[string]time.Time {
+// Поддерживает отмену через ctx.
+func extractVideoDates(ctx context.Context, files []scanner.FileInfo, exifToolPath string) map[string]time.Time {
 	if exifToolPath == "" {
 		exifToolPath = "exiftool"
 	}
@@ -74,7 +76,7 @@ func extractVideoDates(files []scanner.FileInfo, exifToolPath string) map[string
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), videoTimeout)
+	ctx, cancel := context.WithTimeout(ctx, videoTimeout)
 	defer cancel()
 
 	args := []string{

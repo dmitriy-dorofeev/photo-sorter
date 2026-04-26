@@ -59,7 +59,7 @@ func TestEndToEnd(t *testing.T) {
 	dateMap := make(map[string]time.Time)
 	okMap := make(map[string]bool)
 	for _, f := range files {
-		d, ok := resolver.Resolve(f)
+		d, ok := resolver.Resolve(context.Background(), f)
 		dateMap[f.Path] = d
 		okMap[f.Path] = ok
 	}
@@ -236,7 +236,7 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 
 	okMap := make(map[string]bool)
 	for _, f := range files {
-		_, ok := resolver.Resolve(f)
+		_, ok := resolver.Resolve(context.Background(), f)
 		okMap[f.Path] = ok
 	}
 
@@ -302,7 +302,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	dateMap := make(map[string]time.Time)
 	okMap := make(map[string]bool)
 	for _, f := range files {
-		d, ok := resolver.Resolve(f)
+		d, ok := resolver.Resolve(context.Background(), f)
 		dateMap[f.Path] = d
 		okMap[f.Path] = ok
 	}
@@ -408,7 +408,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	resolver := dateresolver.New()
 	resolver.ExifToolPath = fakeExifTool
 
-	d, ok := resolver.Resolve(files[0])
+	d, ok := resolver.Resolve(context.Background(), files[0])
 	if !ok {
 		t.Fatal("expected date from exiftool")
 	}

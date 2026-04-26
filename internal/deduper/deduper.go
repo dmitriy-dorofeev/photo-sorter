@@ -68,7 +68,7 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 		// 3. Вычисляем хеш для каждого файла в группе.
 		var hashed []fileHash
 		for _, f := range group {
-			h, err := hasher.HashFile(f.Path)
+			h, err := hasher.HashFile(ctx, f.Path)
 			if err != nil {
 				return nil, fmt.Errorf("hash file %s: %w", f.Path, err)
 			}
