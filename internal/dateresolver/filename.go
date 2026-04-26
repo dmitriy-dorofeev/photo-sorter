@@ -100,14 +100,17 @@ func parseSignal(name string) (time.Time, bool) {
 	return t, err == nil
 }
 
+// imgWARe парсит формат IMG-YYYYMMDD-WA####.
+// Компилируется один раз на уровне пакета.
+var imgWARe = regexp.MustCompile(`^IMG-(\d{8})-WA\d+$`)
+
 // IMG-YYYYMMDD-WA####
 // Пример: "IMG-20240315-WA0001"
 func parseIMGWA(name string) (time.Time, bool) {
 	if !strings.HasPrefix(name, "IMG-") || !strings.Contains(name, "-WA") {
 		return time.Time{}, false
 	}
-	re := regexp.MustCompile(`^IMG-(\d{8})-WA\d+$`)
-	matches := re.FindStringSubmatch(name)
+	matches := imgWARe.FindStringSubmatch(name)
 	if len(matches) != 2 {
 		return time.Time{}, false
 	}

@@ -26,10 +26,32 @@ type scanResultMsg struct {
 	err        error
 }
 
+// runnerProgressMsg передаёт прогресс из runner.Run в TUI.
+type runnerProgressMsg struct {
+	stage   string
+	current int
+	total   int
+}
+
 func scanTickCmd() tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 		return scanTickMsg(t)
 	})
+}
+
+// progressListenCmd читает прогресс из канала и возвращает его как сообщение.
+// Когда канал закрыт или nil — возвращает nil.
+func progressListenCmd(ch <-chan runnerProgressMsg) tea.Cmd {
+	return func() tea.Msg {
+		if ch == nil {
+			return nil
+		}
+		p, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return p
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -54,12 +76,13 @@ var scanStageNames = []string{
 }
 
 type scanModel struct {
-	running  bool
-	stage    scanStage
-	progress float64 // 0..100
-	done     bool
-	errMsg   string
-	aborted  bool // true если пользователь прервал или ушёл назад
+	running    bool
+	stage      scanStage
+	progress   float64 // 0..100
+	done       bool
+	errMsg     string
+	aborted    bool                   // true если пользователь прервал или ушёл назад
+	progressCh chan runnerProgressMsg // канал для прогресса из runner.Run
 }
 
 func newScanModel() scanModel {
@@ -91,8 +114,21 @@ func (m Model) startScan() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.scanCancel = cancel
 
+	progressCh := m.scan.progressCh
+
 	return func() tea.Msg {
-		res, err := runner.Run(ctx, cfg, nil)
+		res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
+			if progressCh == nil {
+				return
+			}
+			select {
+			case progressCh <- runnerProgressMsg{stage: stage, current: current, total: total}:
+			case <-ctx.Done():
+			}
+		})
+		if progressCh != nil {
+			close(progressCh)
+		}
 		if err != nil {
 			return scanResultMsg{err: err}
 		}
@@ -111,19 +147,42 @@ func (m Model) startScan() tea.Cmd {
 
 func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case runnerProgressMsg:
+		if m.scan.aborted || m.scan.done || !m.scan.running {
+			return m, nil
+		}
+		var pct float64
+		switch msg.stage {
+		case "scan":
+			m.scan.stage = scanStageScanning
+			pct = 0.30
+		case "dedup":
+			m.scan.stage = scanStageDedup
+			pct = 0.30
+		case "sort":
+			m.scan.stage = scanStageTree
+			pct = 0.30
+		default:
+			pct = 0.10
+		}
+		if msg.total > 0 {
+			m.scan.progress = float64(msg.current) / float64(msg.total) * pct * 100
+		} else {
+			m.scan.progress = 0
+		}
+		// Добавляем базовый offset для завершённых этапов
+		switch msg.stage {
+		case "dedup":
+			m.scan.progress += 30
+		case "sort":
+			m.scan.progress += 60
+		}
+		return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh))
+
 	case scanTickMsg:
 		if m.scan.done || m.scan.errMsg != "" || !m.scan.running {
 			return m, nil
 		}
-		m.scan.progress += 3
-		if m.scan.progress >= 95 {
-			m.scan.progress = 95
-		}
-		stageIdx := int(m.scan.progress / 25)
-		if stageIdx > 3 {
-			stageIdx = 3
-		}
-		m.scan.stage = scanStage(stageIdx)
 		return m, scanTickCmd()
 
 	case scanResultMsg:
@@ -141,6 +200,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.files = msg.files
 		m.duplicates = msg.duplicates
 		m.entries = msg.entries
+		m = m.buildPreviewCache()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -168,7 +228,8 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.scan = newScanModel()
 				m.scan.running = true
-				return m, tea.Batch(scanTickCmd(), m.startScan())
+				m.scan.progressCh = make(chan runnerProgressMsg, 10)
+				return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh), m.startScan())
 			}
 			if m.scan.done {
 				m.screen = ScreenPreview

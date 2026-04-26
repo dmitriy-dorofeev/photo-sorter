@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/runner"
@@ -146,8 +145,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	if time.Now().Format(template) == template {
-		fmt.Fprintln(os.Stderr, "Ошибка: некорректный шаблон даты (--template)")
+	if template == "" {
+		fmt.Fprintln(os.Stderr, "Ошибка: шаблон даты не может быть пустым (--template)")
 		os.Exit(1)
 	}
 

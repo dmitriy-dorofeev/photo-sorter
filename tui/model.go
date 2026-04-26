@@ -43,6 +43,10 @@ type Model struct {
 	duplicates []deduper.Result
 	entries    []sorter.Entry
 
+	// Кэш для preview.go (пересчитывается при изменении entries)
+	previewDirCache   []string
+	previewCountCache map[string]int
+
 	// Копирование
 	copyCancel   context.CancelFunc
 	copyProgress *atomic.Int64
@@ -127,6 +131,8 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.files = nil
 	m.duplicates = nil
 	m.entries = nil
+	m.previewDirCache = nil
+	m.previewCountCache = nil
 	m.sources = newSourcesModel()
 	m.target = newTargetModel()
 	m.settings = newSettingsModel()

@@ -1,7 +1,6 @@
 package deduper
 
 import (
-	"bufio"
 	"io"
 	"os"
 
@@ -18,11 +17,10 @@ func HashFile(path string) (uint64, error) {
 	defer f.Close()
 
 	h := xxhash.New()
-	reader := bufio.NewReader(f)
 	buf := make([]byte, 64*1024)
 
 	for {
-		n, err := reader.Read(buf)
+		n, err := f.Read(buf)
 		if n > 0 {
 			_, _ = h.Write(buf[:n])
 		}

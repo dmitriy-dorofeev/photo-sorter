@@ -231,7 +231,8 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = ScreenScan
 			m.scan = newScanModel()
 			m.scan.running = true
-			return m, tea.Batch(scanTickCmd(), m.startScan())
+			m.scan.progressCh = make(chan runnerProgressMsg, 10)
+			return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh), m.startScan())
 		}
 
 		switch msg.String() {

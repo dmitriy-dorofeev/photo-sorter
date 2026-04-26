@@ -16,11 +16,29 @@ type Resolver struct {
 	// ExifToolPath — путь к бинарнику exiftool (по умолчанию "exiftool").
 	// Используется для извлечения метаданных из видео.
 	ExifToolPath string
+	// videoCache заполняется ResolveBatch и используется Resolve
+	// для быстрого доступа к датам видео без повторных вызовов exiftool.
+	videoCache map[string]time.Time
 }
 
 // New создаёт новый Resolver с UseModTime=true.
 func New() *Resolver {
 	return &Resolver{UseModTime: true}
+}
+
+// ResolveBatch предварительно извлекает даты для всех видео-файлов
+// одним вызовом exiftool. Результат кэшируется внутри Resolver.
+func (r *Resolver) ResolveBatch(files []scanner.FileInfo) {
+	var videoFiles []scanner.FileInfo
+	for _, f := range files {
+		if isVideo(f.Ext) {
+			videoFiles = append(videoFiles, f)
+		}
+	}
+	if len(videoFiles) == 0 {
+		return
+	}
+	r.videoCache = extractVideoDates(videoFiles, r.ExifToolPath)
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.
@@ -39,8 +57,11 @@ func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
 		}
 	}
 
-	// 2. Видео-метаданные через exiftool.
+	// 2. Видео-метаданные через exiftool (сначала кэш, затем fallback).
 	if isVideo(f.Ext) {
+		if t, ok := r.videoCache[f.Path]; ok {
+			return t, true
+		}
 		if t, ok := extractVideoDate(f.Path, r.ExifToolPath); ok {
 			return t, true
 		}

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os/exec"
 	"time"
+
+	"photo-sorter/internal/scanner"
 )
 
 // isVideo возвращает true для видео-расширений.
@@ -56,4 +58,55 @@ func extractVideoDate(path, exifToolPath string) (time.Time, bool) {
 	}
 
 	return time.Time{}, false
+}
+
+// extractVideoDates извлекает даты для нескольких видео-файлов одним
+// вызовом exiftool. Возвращает мапу путь → время.
+func extractVideoDates(files []scanner.FileInfo, exifToolPath string) map[string]time.Time {
+	if exifToolPath == "" {
+		exifToolPath = "exiftool"
+	}
+	if len(files) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	args := []string{
+		"-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
+		"-json", "--",
+	}
+	for _, f := range files {
+		args = append(args, f.Path)
+	}
+
+	cmd := exec.CommandContext(ctx, exifToolPath, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil
+	}
+
+	var results []map[string]interface{}
+	if err := json.Unmarshal(out, &results); err != nil {
+		return nil
+	}
+
+	result := make(map[string]time.Time, len(results))
+	for _, meta := range results {
+		sourceFile, _ := meta["SourceFile"].(string)
+		if sourceFile == "" {
+			continue
+		}
+		for _, key := range []string{"DateTimeOriginal", "CreateDate", "MediaCreateDate"} {
+			if v, ok := meta[key].(string); ok && v != "" {
+				if t, err := time.Parse("2006:01:02 15:04:05", v); err == nil {
+					result[sourceFile] = t
+					break
+				}
+			}
+		}
+	}
+
+	return result
 }
