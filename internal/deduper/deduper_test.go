@@ -153,7 +153,10 @@ func TestFindDuplicates(t *testing.T) {
 				livePhotos = false
 			}
 			d := New(tt.files, livePhotos)
-			got := d.FindDuplicates()
+			got, err := d.FindDuplicates()
+			if err != nil {
+				t.Fatalf("FindDuplicates() error = %v", err)
+			}
 			if len(got) != tt.wantLen {
 				t.Errorf("FindDuplicates() returned %d results, want %d", len(got), tt.wantLen)
 			}

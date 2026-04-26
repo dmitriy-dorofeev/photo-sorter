@@ -87,7 +87,10 @@ func TestEndToEnd(t *testing.T) {
 
 	// 3. Find duplicates
 	ded := deduper.New(files, true)
-	dupResults := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates()
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
 
 	// All minimal.jpg copies (7 files, 506 bytes) should form one duplicate group
 	var minimalDupGroup *deduper.Result
@@ -228,7 +231,10 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 
 	// Build tree: nothing should go to unsorted
 	ded := deduper.New(files, true)
-	dupResults := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates()
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 
@@ -277,14 +283,14 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	}
 
 	expectedDates := map[string]string{
-		"IMG_20240115_143022.jpg":            "2024-01-15",
-		"VID_20240120_120000.mp4":            "2024-01-20",
+		"IMG_20240115_143022.jpg":               "2024-01-15",
+		"VID_20240120_120000.mp4":               "2024-01-20",
 		"Screenshot 2024-02-10 at 12.30.45.png": "2024-02-10",
-		"signal-2024-04-01-14-30-22.jpg":     "2024-04-01",
-		"IMG-20240315-WA0001.jpg":            "2024-03-15",
-		"PXL_20240501_143022123.jpg":         "2024-05-01",
-		"20240315_143022.jpg":                "2024-03-15",
-		"2024-03-15 14.30.22.jpg":            "2024-03-15",
+		"signal-2024-04-01-14-30-22.jpg":        "2024-04-01",
+		"IMG-20240315-WA0001.jpg":               "2024-03-15",
+		"PXL_20240501_143022123.jpg":            "2024-05-01",
+		"20240315_143022.jpg":                   "2024-03-15",
+		"2024-03-15 14.30.22.jpg":               "2024-03-15",
 	}
 
 	for name, wantDate := range expectedDates {
@@ -318,7 +324,10 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 
 	// Build tree and verify targets
 	ded := deduper.New(files, true)
-	dupResults := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates()
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 
@@ -385,7 +394,10 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 
 	// Verify tree uses exiftool date
 	ded := deduper.New(files, true)
-	dupResults := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates()
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 
@@ -417,7 +429,10 @@ func TestCancellation(t *testing.T) {
 	files, _ := sc.Scan()
 	resolver := dateresolver.New()
 	ded := deduper.New(files, true)
-	dupResults := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates()
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
 	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
 

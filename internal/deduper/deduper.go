@@ -3,7 +3,9 @@
 package deduper
 
 import (
+	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"photo-sorter/internal/scanner"
@@ -33,9 +35,9 @@ func New(files []scanner.FileInfo, livePhotos bool) *Deduper {
 //  2. Для групп с ≥2 файлами вычисляется xxhash.
 //  3. Группировка по хешу внутри размерной группы.
 //  4. Пары Live Photos (.HEIC + .MOV с одним basename) исключаются из дубликатов.
-func (d *Deduper) FindDuplicates() []Result {
+func (d *Deduper) FindDuplicates() ([]Result, error) {
 	if len(d.files) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// 1. Группировка по размеру.
@@ -62,8 +64,7 @@ func (d *Deduper) FindDuplicates() []Result {
 		for _, f := range group {
 			h, err := HashFile(f.Path)
 			if err != nil {
-				// Файл недоступен для чтения — пропускаем.
-				continue
+				return nil, fmt.Errorf("hash file %s: %w", f.Path, err)
 			}
 			hashed = append(hashed, fileHash{info: f, hash: h})
 		}
@@ -79,6 +80,11 @@ func (d *Deduper) FindDuplicates() []Result {
 			if len(hashGroup) < 2 {
 				continue
 			}
+
+			// Детерминированный выбор оригинала (по пути) — избегаем случайности map-итерации.
+			sort.Slice(hashGroup, func(i, j int) bool {
+				return hashGroup[i].info.Path < hashGroup[j].info.Path
+			})
 
 			original := hashGroup[0].info
 			var duplicates []scanner.FileInfo
@@ -100,7 +106,7 @@ func (d *Deduper) FindDuplicates() []Result {
 		}
 	}
 
-	return results
+	return results, nil
 }
 
 // isLivePhotoPair возвращает true, если два файла являются парой Live Photos:

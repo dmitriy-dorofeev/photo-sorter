@@ -53,7 +53,10 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	// 2. Dedup
 	d := deduper.New(files, cfg.LivePhotos)
-	res.Duplicates = d.FindDuplicates()
+	res.Duplicates, err = d.FindDuplicates()
+	if err != nil {
+		return res, fmt.Errorf("dedup: %w", err)
+	}
 	if progress != nil {
 		progress("dedup", len(res.Duplicates), len(res.Duplicates))
 	}
