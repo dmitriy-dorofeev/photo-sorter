@@ -29,6 +29,16 @@ func HashFile(ctx context.Context, path string) (uint64, error) {
 	}
 	defer f.Close()
 
+	// TOCTOU-защита: проверяем, что открытый fd — всё ещё обычный файл.
+	// Если между Lstat и Open злоумышленник заменил файл на symlink,
+	// f.Stat() обнаружит это.
+	if stat, err := f.Stat(); err != nil || !stat.Mode().IsRegular() {
+		if err != nil {
+			return 0, err
+		}
+		return 0, fmt.Errorf("not a regular file: %s", path)
+	}
+
 	h := xxhash.New()
 	buf := make([]byte, 64*1024)
 

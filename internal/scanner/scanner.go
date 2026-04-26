@@ -68,13 +68,18 @@ func (s *Scanner) Scan(ctx context.Context) ([]FileInfo, error) {
 					return nil
 				}
 
-				ext := strings.ToLower(filepath.Ext(d.Name()))
-				if !s.allowed(ext) {
+				// Пропускаем non-regular файлы (symlink, FIFO, device и т.д.)
+				// чтобы избежать abort pipeline в deduper/hasher.
+				info, err := d.Info()
+				if err != nil {
+					return nil
+				}
+				if !info.Mode().IsRegular() {
 					return nil
 				}
 
-				info, err := d.Info()
-				if err != nil {
+				ext := strings.ToLower(filepath.Ext(d.Name()))
+				if !s.allowed(ext) {
 					return nil
 				}
 

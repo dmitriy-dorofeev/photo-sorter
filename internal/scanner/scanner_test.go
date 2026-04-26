@@ -147,19 +147,13 @@ func TestScan_Symlink(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
-	// WalkDir обходит symlink как отдельный файл (Lstat).
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files (real + symlink), got %d", len(files))
+	// Non-regular файлы (symlink, FIFO, device) пропускаются
+	// во избежание abort pipeline в deduper/hasher.
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file (real only, symlink skipped), got %d", len(files))
 	}
-	// Размер symlink — размер самой ссылки, а не цели.
-	var symlinkSize int64
-	for _, f := range files {
-		if f.Name == "link.jpg" {
-			symlinkSize = f.Size
-		}
-	}
-	if symlinkSize == 1 {
-		t.Error("symlink size should be size of link, not target")
+	if files[0].Name != "real.jpg" {
+		t.Errorf("expected real.jpg, got %s", files[0].Name)
 	}
 }
 

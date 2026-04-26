@@ -22,47 +22,9 @@
 
 **Статус: ✅ Выполнено.**
 
----
-
 ## 2. Безопасность
 
-### 2.1 🔴 TOCTOU в `copier.Copy` — race между проверкой и записью
-**Файл:** `internal/copier/copier.go:100-131`  
-**Проблема:** между `os.Lstat(target)` + `hasher.HashFile(target)` + `findFreeName(target)` и финальным `copyFile` + `os.Rename` злоумышленник (или другой процесс) может подменить целевой файл. `copyFile` удаляет symlink перед `Rename`, но регулярный файл, созданный после `findFreeName`, будет атомарно перезаписан.
-
-**Исправление:** в `copyFile` после `os.CreateTemp` проверять, что `dst` не появился заново до `os.Rename`. Или открывать `dst` с `O_EXCL` на POSIX (создаётся только если не существует).
-
-### 2.2 🟡 TOCTOU в `hasher.HashFile`
-**Файл:** `internal/hasher/hasher.go:16-24`  
-**Проблема:** между `os.Lstat` (проверка на regular file) и `os.Open` злоумышленник может заменить файл на symlink.
-
-**Исправление:** открывать файл с `O_NOFOLLOW` на Unix; либо после `Open` делать `f.Stat()` и повторно проверять `IsRegular()`.
-
-### 2.3 🟡 Symlink/FIFO в source дереве ломает весь pipeline
-**Файл:** `internal/scanner/scanner.go` → `internal/deduper/deduper.go`  
-**Проблема:** scanner не проверяет `d.Type().IsRegular()` и включает symlink/FIFO в список. Deduper при хешировании получает ошибку `not a regular file` и **прерывает всю дедупликацию** одним файлом.
-
-**Исправление:** в scanner пропускать `!d.Type().IsRegular()`. Или в deduper обрабатывать hash-ошибки как `skip` файла, а не `return nil, err`.
-
-### 2.4 🟡 Target создаётся с правами 0755
-**Файл:** `cmd/main.go:151`  
-**Проблема:** `os.MkdirAll(target, 0755)` делает папку читаемой всеми. Если target содержит личные фото, это раскрытие данных.
-
-**Исправление:** использовать `0750` (владелец + группа) или `0700`.
-
-### 2.5 🟡 Path traversal validation bypass при пустом `targetRoot`
-**Файл:** `internal/copier/copier.go:82-88`  
-**Проблема:** если `Copier` создан не через `New()` (а напрямую `&Copier{}`), `targetRoot` может быть пустым, и `validateTargetPath` пропускается.
-
-**Исправение:** в `Copy` вызывать `validateTargetPath` всегда, если `targetRoot != ""`; или инициализировать `targetRoot` через конструктор и запрещать zero-value использование.
-
-### 2.6 🟡 Self-copy: `source == target` не проверяется
-**Файл:** `cmd/main.go`  
-**Проблема:** если source вложен в target (или совпадает с ним), программа может читать файлы, которые одновременно пишет, что приводит к бесконечной рекурсии или повреждению данных.
-
-**Исправение:** после `filepath.Abs()` для всех source и target проверять, что target не является префиксом ни одного source.
-
----
+**Статус: ✅ Выполнено.**
 
 ## 3. Надёжность и отказоустойчивость
 

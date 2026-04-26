@@ -189,9 +189,13 @@ func TestFindDuplicates_HashError(t *testing.T) {
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
 	d := New(files, true)
-	_, err := d.FindDuplicates(context.Background())
-	if err == nil {
-		t.Error("expected error from hash failure")
+	results, err := d.FindDuplicates(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Нехешируемый файл исключается из дедупликации — остаётся один файл в группе.
+	if len(results) != 0 {
+		t.Errorf("expected 0 duplicates, got %d", len(results))
 	}
 }
 
@@ -208,9 +212,13 @@ func TestFindDuplicates_NamedPipe(t *testing.T) {
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
 	d := New(files, true)
-	_, err := d.FindDuplicates(context.Background())
-	if err == nil {
-		t.Error("expected error from hashing named pipe")
+	results, err := d.FindDuplicates(context.Background())
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	// Non-regular файл исключается из дедупликации — остаётся один файл в группе.
+	if len(results) != 0 {
+		t.Errorf("expected 0 duplicates, got %d", len(results))
 	}
 }
 

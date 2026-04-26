@@ -3,6 +3,7 @@ package copier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -73,18 +74,23 @@ func (c *Copier) Copy(
 			continue
 		}
 
+		// Защита от zero-value Copier: без targetRoot не можем валидировать пути.
+		if c.targetRoot == "" {
+			stats.Errors++
+			c.recordError(&stats, fmt.Errorf("target root is empty"))
+			continue
+		}
+
+		if err := validateTargetPath(c.targetRoot, e.Target); err != nil {
+			stats.Errors++
+			c.recordError(&stats, err)
+			continue
+		}
+
 		if c.dryRun {
 			stats.Copied++
 			consecutiveErrors = 0
 			continue
-		}
-
-		if c.targetRoot != "" {
-			if err := validateTargetPath(c.targetRoot, e.Target); err != nil {
-				stats.Errors++
-				c.recordError(&stats, err)
-				continue
-			}
 		}
 
 		if err := os.MkdirAll(filepath.Dir(e.Target), 0755); err != nil {
@@ -128,7 +134,12 @@ func (c *Copier) Copy(
 			}
 		}
 
-		if err := copyFile(e.Source.Path, target); err != nil {
+		if err := copyFile(ctx, e.Source.Path, target); err != nil {
+			if errors.Is(err, errSkipCollision) {
+				stats.Skipped++
+				consecutiveErrors = 0
+				continue
+			}
 			stats.Errors++
 			c.recordError(&stats, err)
 			if c.shouldAbort(&consecutiveErrors) {
@@ -268,7 +279,11 @@ func findFreeName(target string) (string, error) {
 	return "", fmt.Errorf("cannot find free name for %s after %d attempts", target, maxIterations)
 }
 
-func copyFile(src, dst string) error {
+// errSkipCollision возвращается copyFile, если целевой файл неожиданно
+// появился с тем же содержимым (TOCTOU-защита после findFreeName).
+var errSkipCollision = errors.New("target collision with identical content")
+
+func copyFile(ctx context.Context, src, dst string) error {
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -305,11 +320,25 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	// Если dst — symlink, удаляем его перед rename,
-	// чтобы гарантированно заменить symlink файлом, а не писать через него.
-	if info, err := os.Lstat(dst); err == nil && info.Mode()&os.ModeSymlink != 0 {
-		if err := os.Remove(dst); err != nil {
-			return err
+	// Финальная TOCTOU-защита: проверяем dst непосредственно перед rename.
+	// Если dst — symlink, удаляем (не пишем через него).
+	// Если dst — обычный файл, появившийся после findFreeName, сравниваем хеши:
+	//   совпадают — пропускаем, разные — ошибка (не перезаписываем неожиданные данные).
+	if info, err := os.Lstat(dst); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if err := os.Remove(dst); err != nil {
+				return err
+			}
+		} else if info.Mode().IsRegular() {
+			hSrc, err1 := hasher.HashFile(ctx, src)
+			hDst, err2 := hasher.HashFile(ctx, dst)
+			if err1 == nil && err2 == nil && hSrc == hDst {
+				// Тот же файл — пропускаем, удаляем temp.
+				cleanup = false
+				os.Remove(tmpPath)
+				return errSkipCollision
+			}
+			return fmt.Errorf("target collision detected: %s appeared unexpectedly", dst)
 		}
 	}
 

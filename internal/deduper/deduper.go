@@ -4,7 +4,6 @@ package deduper
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -66,11 +65,13 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 		}
 
 		// 3. Вычисляем хеш для каждого файла в группе.
+		// Ошибка хеширования (например, файл удалён или стал недоступным)
+		// не прерывает всю операцию — файл просто исключается из дедупликации.
 		var hashed []fileHash
 		for _, f := range group {
 			h, err := hasher.HashFile(ctx, f.Path)
 			if err != nil {
-				return nil, fmt.Errorf("hash file %s: %w", f.Path, err)
+				continue
 			}
 			hashed = append(hashed, fileHash{info: f, hash: h})
 		}

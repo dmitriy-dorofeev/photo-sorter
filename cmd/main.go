@@ -148,7 +148,7 @@ func main() {
 	}
 
 	// Проверка доступности target для записи
-	if err := os.MkdirAll(target, 0755); err != nil {
+	if err := os.MkdirAll(target, 0750); err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка: не удалось создать целевую папку: %v\n", err)
 		os.Exit(1)
 	}
@@ -182,6 +182,32 @@ func main() {
 		}
 		if !info.IsDir() {
 			fmt.Fprintf(os.Stderr, "Ошибка: %s не является директорией\n", src)
+			os.Exit(1)
+		}
+	}
+
+	// Проверка на пересечение source и target (self-copy).
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка: не удалось определить абсолютный путь target: %v\n", err)
+		os.Exit(1)
+	}
+	for _, src := range sources {
+		absSrc, err := filepath.Abs(src)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка: не удалось определить абсолютный путь source: %v\n", err)
+			os.Exit(1)
+		}
+		if absSrc == absTarget {
+			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка и целевая папка не могут совпадать: %s\n", src)
+			os.Exit(1)
+		}
+		if strings.HasPrefix(absTarget, absSrc+string(filepath.Separator)) {
+			fmt.Fprintf(os.Stderr, "Ошибка: целевая папка не может быть внутри исходной: %s\n", src)
+			os.Exit(1)
+		}
+		if strings.HasPrefix(absSrc, absTarget+string(filepath.Separator)) {
+			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка не может быть внутри целевой: %s\n", src)
 			os.Exit(1)
 		}
 	}
