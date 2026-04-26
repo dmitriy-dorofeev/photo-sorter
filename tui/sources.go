@@ -4,26 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// dirItem описывает один элемент в списке папок.
-type dirItem struct {
-	name     string
-	path     string
-	isParent bool // true для ".."
-}
-
 // sourcesModel — состояние экрана выбора источника.
 type sourcesModel struct {
-	currentDir string
-	items      []dirItem
-	cursor     int
-	width      int
-	height     int
+	dirBrowserModel
 }
 
 func newSourcesModel() sourcesModel {
@@ -33,54 +21,12 @@ func newSourcesModel() sourcesModel {
 	}
 
 	return sourcesModel{
-		currentDir: home,
-		items:      loadDirItems(home),
-		cursor:     0,
+		dirBrowserModel: newDirBrowserModel(home),
 	}
 }
 
 func (s sourcesModel) Init() tea.Cmd {
 	return nil
-}
-
-// loadDirItems возвращает список папок в директории + элемент "..".
-func loadDirItems(dir string) []dirItem {
-	var items []dirItem
-
-	clean := filepath.Clean(dir)
-	if clean != "/" {
-		items = append(items, dirItem{
-			name:     "..",
-			path:     filepath.Dir(clean),
-			isParent: true,
-		})
-	}
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return items
-	}
-
-	for _, e := range entries {
-		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
-			items = append(items, dirItem{
-				name: e.Name(),
-				path: filepath.Join(dir, e.Name()),
-			})
-		}
-	}
-
-	sort.Slice(items, func(i, j int) bool {
-		if items[i].isParent && !items[j].isParent {
-			return true
-		}
-		if !items[i].isParent && items[j].isParent {
-			return false
-		}
-		return items[i].name < items[j].name
-	})
-
-	return items
 }
 
 func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -100,34 +46,19 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyUp:
-			if m.sources.cursor > 0 {
-				m.sources.cursor--
-			}
+			m.sources.moveUp()
 			return m, nil
 
 		case tea.KeyDown:
-			if m.sources.cursor < len(m.sources.items)-1 {
-				m.sources.cursor++
-			}
+			m.sources.moveDown()
 			return m, nil
 
 		case tea.KeyEnter:
-			if len(m.sources.items) == 0 {
-				return m, nil
-			}
-			item := m.sources.items[m.sources.cursor]
-			m.sources.currentDir = item.path
-			m.sources.items = loadDirItems(item.path)
-			m.sources.cursor = 0
+			m.sources.enter()
 			return m, nil
 
 		case tea.KeyBackspace:
-			parent := filepath.Dir(filepath.Clean(m.sources.currentDir))
-			if parent != m.sources.currentDir {
-				m.sources.currentDir = parent
-				m.sources.items = loadDirItems(parent)
-				m.sources.cursor = 0
-			}
+			m.sources.goBack()
 			return m, nil
 
 		case tea.KeyRight:

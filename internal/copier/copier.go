@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"golang.org/x/sys/unix"
-	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
 )
 
@@ -107,8 +107,8 @@ func (c *Copier) Copy(
 					continue
 				}
 			} else {
-				hSrc, err1 := deduper.HashFile(e.Source.Path)
-				hDst, err2 := deduper.HashFile(target)
+				hSrc, err1 := hasher.HashFile(e.Source.Path)
+				hDst, err2 := hasher.HashFile(target)
 				if err1 == nil && err2 == nil && hSrc == hDst {
 					stats.Skipped++
 					consecutiveErrors = 0

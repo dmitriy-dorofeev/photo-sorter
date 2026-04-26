@@ -133,7 +133,7 @@ func TestEndToEnd(t *testing.T) {
 			skipCount++
 		} else {
 			copiedEntries = append(copiedEntries, e)
-			if strings.Contains(e.Target, "unsorted") {
+			if sorter.IsUnsorted(e.Target) {
 				unsortedCount++
 			}
 		}
@@ -240,7 +240,7 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 
 	unsortedCount := 0
 	for _, e := range entries {
-		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedCount++
 		}
 	}
@@ -333,7 +333,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 
 	unsortedCount := 0
 	for _, e := range entries {
-		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedCount++
 		}
 	}
@@ -404,7 +404,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
-	if strings.Contains(entries[0].Target, "unsorted") {
+	if sorter.IsUnsorted(entries[0].Target) {
 		t.Errorf("expected dated target, got unsorted: %s", entries[0].Target)
 	}
 	if !strings.Contains(entries[0].Target, "2023/07/07") {

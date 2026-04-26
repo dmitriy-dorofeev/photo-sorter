@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 )
 
@@ -14,11 +15,11 @@ func testdata(name string) string {
 
 func TestHashFile_Stability(t *testing.T) {
 	path := testdata("dup_a.bin")
-	h1, err := HashFile(path)
+	h1, err := hasher.HashFile(path)
 	if err != nil {
 		t.Fatalf("hashFile first run: %v", err)
 	}
-	h2, err := HashFile(path)
+	h2, err := hasher.HashFile(path)
 	if err != nil {
 		t.Fatalf("hashFile second run: %v", err)
 	}
@@ -28,11 +29,11 @@ func TestHashFile_Stability(t *testing.T) {
 }
 
 func TestHashFile_DifferentContent(t *testing.T) {
-	h1, err := HashFile(testdata("same_size_a.bin"))
+	h1, err := hasher.HashFile(testdata("same_size_a.bin"))
 	if err != nil {
 		t.Fatalf("hashFile: %v", err)
 	}
-	h2, err := HashFile(testdata("same_size_b.bin"))
+	h2, err := hasher.HashFile(testdata("same_size_b.bin"))
 	if err != nil {
 		t.Fatalf("hashFile: %v", err)
 	}

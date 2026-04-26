@@ -4,7 +4,6 @@ package dateresolver
 
 import (
 	"photo-sorter/internal/scanner"
-	"strings"
 	"time"
 )
 
@@ -80,8 +79,8 @@ func (r *Resolver) Resolve(f scanner.FileInfo) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-// isJPEG возвращает true для расширений .jpg и .jpeg (любой регистр).
+// isJPEG возвращает true для расширений .jpg и .jpeg.
+// Контракт: scanner.FileInfo.Ext всегда lowercase.
 func isJPEG(ext string) bool {
-	e := strings.ToLower(ext)
-	return e == ".jpg" || e == ".jpeg"
+	return ext == ".jpg" || ext == ".jpeg"
 }

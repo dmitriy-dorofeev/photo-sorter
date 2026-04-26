@@ -42,46 +42,14 @@
 
 ## 3. Архитектура и связанность
 
-### 3.1 `internal/copier/copier.go:93` — `copier` зависит от `deduper.HashFile`
+✅ **Все пункты выполнены.**
 
-**Проблема:** хеширование — отдельная ответственность. `copier` не должен зависеть от `deduper`.
-
-**Как исправить:** вынести `HashFile` в отдельный пакет `internal/hasher`. Оба пакета (`deduper` и `copier`) будут зависеть от `hasher`.
-
-### 3.2 Дублирование логики `dirBrowser` — `tui/sources.go` ↔ `tui/target.go`
-
-**Проблема:** два файла практически идентичны (навигация по папкам, `os.ReadDir`, рендеринг списка).
-
-**Как исправить:** выделить обобщённый компонент `dirBrowserModel` с параметрами (title, allowCreateDir и т.д.).
-
-### 3.3 Дублирование подсчёта статистики
-
-**Проблема:** идентичная логика подсчёта `unsorted` / `withDate` / `duplicates` дублируется в:
-- `cmd/main.go:204-213`
-- `tui/scan.go:214-226`
-- `tui/preview.go` (частично)
-
-**Как исправить:** добавить метод `Result.Stats()` в пакет `runner` или `sorter`.
-
-### 3.4 `strings.Contains(e.Target, "unsorted")` — хрупкая эвристика
-
-**Проблема:** если целевая папка называется `/home/user/unsorted_backup/`, ВСЕ файлы в ней будут засчитаны как unsorted.
-
-**Как исправить:**
-- Вынести `"unsorted"` в именованную константу `const UnsortedDir = "unsorted"`.
-- Проверять `filepath.Base(filepath.Dir(e.Target)) == UnsortedDir` или добавить в `sorter.Entry` булево поле `IsUnsorted bool`.
-
-### 3.5 `internal/runner/runner.go:22` — `DryRun` — мёртвое поле
-
-**Проблема:** `DryRun` присутствует в `Config`, но `runner` его нигде не использует. Путает пользователей API.
-
-**Как исправить:** либо использовать `DryRun` в `runner` (например, не создавать директории в `sorter.BuildTree`), либо убрать из `Config` и оставить только в CLI/TUI.
-
-### 3.6 `internal/dateresolver/dateresolver.go:36, 63` — Двойное `strings.ToLower`
-
-**Проблема:** `scanner` уже приводит `Ext` к lowercase. `isJPEG` и `isVideo` делают это снова.
-
-**Как исправить:** задокументировать контракт, что `FileInfo.Ext` всегда lowercase, и убрать лишние `ToLower`.
+- **3.1 HashFile в hasher** — `HashFile` вынесен в `internal/hasher`; `deduper` и `copier` зависят от `hasher`.
+- **3.2 dirBrowser дедупликация** — выделен обобщённый `dirBrowserModel` в `tui/dirbrowser.go`; `sourcesModel` и `targetModel` используют встраивание.
+- **3.3 Дублирование статистики** — добавлен `runner.Result.Stats() → ResultStats`; `cmd/main.go` и `tui/scan.go` используют единый метод.
+- **3.4 Хрупкая эвристика unsorted** — добавлена константа `sorter.UnsortedDir` и функция `sorter.IsUnsorted`; заменены все `strings.Contains`.
+- **3.5 Мёртвое поле DryRun** — убрано из `runner.Config`.
+- **3.6 Двойное ToLower** — убраны лишние `strings.ToLower` из `isJPEG` и `isVideo`; задокументирован контракт lowercase Ext.
 
 
 ---

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"photo-sorter/internal/sorter"
 )
 
 func TestRun_EndToEnd(t *testing.T) {
@@ -53,7 +55,7 @@ func TestRun_EndToEnd(t *testing.T) {
 	// Verify unsorted count: live_photo.HEIC, live_photo.MOV, video.mp4 = 3
 	var unsortedCount int
 	for _, e := range res.Entries {
-		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedCount++
 		}
 	}
@@ -83,7 +85,7 @@ func TestRun_UseModTime(t *testing.T) {
 	// With UseModTime=true, nothing should be unsorted
 	var unsortedCount int
 	for _, e := range res.Entries {
-		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedCount++
 		}
 	}

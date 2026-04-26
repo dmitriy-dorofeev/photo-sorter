@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"photo-sorter/internal/sorter"
 )
 
 func (m Model) updatePreview(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -135,7 +136,7 @@ func (m Model) dirFileCount(dir string) int {
 func (m Model) unsortedFiles() []string {
 	var files []string
 	for _, e := range m.entries {
-		if !e.Skip && strings.Contains(e.Target, "unsorted") {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			files = append(files, e.Source.Name)
 		}
 	}

@@ -10,10 +10,10 @@ import (
 )
 
 // isVideo возвращает true для видео-расширений.
+// Контракт: scanner.FileInfo.Ext всегда lowercase.
 func isVideo(ext string) bool {
 	switch ext {
-	case ".mov", ".mp4", ".avi", ".mkv",
-		".MOV", ".MP4", ".AVI", ".MKV":
+	case ".mov", ".mp4", ".avi", ".mkv":
 		return true
 	}
 	return false

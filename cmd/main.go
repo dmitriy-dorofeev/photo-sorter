@@ -11,6 +11,7 @@ import (
 
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/runner"
+	"photo-sorter/internal/sorter"
 	"photo-sorter/tui"
 )
 
@@ -168,7 +169,6 @@ func main() {
 		Template:     template,
 		LivePhotos:   livePhotos,
 		IncludeVideo: includeVideo,
-		DryRun:       dryRun,
 		UseMTime:     useMTime,
 	}
 
@@ -196,25 +196,18 @@ func main() {
 }
 
 func printTextReport(res runner.Result, stats copier.Stats) {
-	total := len(res.Files)
-	var withDate, unsortedCount, dupCount int
+	st := res.Stats()
 	var unsortedFiles []string
-
 	for _, e := range res.Entries {
-		if e.Skip {
-			dupCount++
-		} else if strings.Contains(e.Target, "unsorted") {
-			unsortedCount++
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedFiles = append(unsortedFiles, filepath.Base(e.Target))
-		} else {
-			withDate++
 		}
 	}
 
-	fmt.Printf("Найдено файлов:      %d\n", total)
-	fmt.Printf("Определено дат:       %d\n", withDate)
-	fmt.Printf("Без даты (unsorted):  %d\n", unsortedCount)
-	fmt.Printf("Дубликатов:           %d\n", dupCount)
+	fmt.Printf("Найдено файлов:      %d\n", st.Total)
+	fmt.Printf("Определено дат:       %d\n", st.WithDate)
+	fmt.Printf("Без даты (unsorted):  %d\n", st.Unsorted)
+	fmt.Printf("Дубликатов:           %d\n", st.Duplicates)
 	fmt.Println()
 	fmt.Printf("Скопировано:  %d\n", stats.Copied)
 	fmt.Printf("Пропущено:    %d\n", stats.Skipped)
@@ -251,19 +244,13 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 }
 
 func printJSONReport(res runner.Result, stats copier.Stats) {
-	total := len(res.Files)
-	var withDate, unsortedCount, dupCount int
+	st := res.Stats()
 	var unsortedFiles []string
 	var dupGroups []jsonDupGroup
 
 	for _, e := range res.Entries {
-		if e.Skip {
-			dupCount++
-		} else if strings.Contains(e.Target, "unsorted") {
-			unsortedCount++
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedFiles = append(unsortedFiles, e.Source.Path)
-		} else {
-			withDate++
 		}
 	}
 
@@ -279,10 +266,10 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 	}
 
 	report := jsonReport{
-		FilesFound:      total,
-		WithDate:        withDate,
-		UnsortedCount:   unsortedCount,
-		DuplicateCount:  dupCount,
+		FilesFound:      st.Total,
+		WithDate:        st.WithDate,
+		UnsortedCount:   st.Unsorted,
+		DuplicateCount:  st.Duplicates,
 		Copied:          stats.Copied,
 		Skipped:         stats.Skipped,
 		Errors:          stats.Errors,

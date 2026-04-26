@@ -295,16 +295,11 @@ type scanStats struct {
 }
 
 func (m Model) computeScanStats() scanStats {
-	var s scanStats
-	s.total = len(m.files)
-	for _, e := range m.entries {
-		if e.Skip {
-			s.duplicates++
-		} else if strings.Contains(e.Target, "unsorted") {
-			s.unsorted++
-		} else {
-			s.withDate++
-		}
+	st := runner.Result{Files: m.files, Entries: m.entries}.Stats()
+	return scanStats{
+		total:      st.Total,
+		withDate:   st.WithDate,
+		unsorted:   st.Unsorted,
+		duplicates: st.Duplicates,
 	}
-	return s
 }

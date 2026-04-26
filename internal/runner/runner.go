@@ -19,7 +19,6 @@ type Config struct {
 	Template     string   // шаблон папок (Go time layout)
 	LivePhotos   bool     // группировать Live Photos
 	IncludeVideo bool     // включать видео
-	DryRun       bool     // пробный прогон (не используется в runner, нужен для CLI)
 	UseMTime     bool     // fallback на дату изменения файла
 }
 
@@ -28,6 +27,30 @@ type Result struct {
 	Files      []scanner.FileInfo
 	Duplicates []deduper.Result
 	Entries    []sorter.Entry
+}
+
+// ResultStats содержит агрегированную статистику по результатам pipeline.
+type ResultStats struct {
+	Total      int
+	WithDate   int
+	Unsorted   int
+	Duplicates int
+}
+
+// Stats вычисляет статистику по Entries: дубликаты, с датой, без даты.
+func (r Result) Stats() ResultStats {
+	var s ResultStats
+	s.Total = len(r.Files)
+	for _, e := range r.Entries {
+		if e.Skip {
+			s.Duplicates++
+		} else if sorter.IsUnsorted(e.Target) {
+			s.Unsorted++
+		} else {
+			s.WithDate++
+		}
+	}
+	return s
 }
 
 // Run выполняет полный pipeline: сканирование → дедупликация → сортировка.

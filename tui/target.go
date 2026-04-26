@@ -10,11 +10,7 @@ import (
 
 // targetModel — состояние экрана выбора целевой папки.
 type targetModel struct {
-	currentDir string
-	items      []dirItem
-	cursor     int
-	width      int
-	height     int
+	dirBrowserModel
 }
 
 func newTargetModel() targetModel {
@@ -38,34 +34,19 @@ func (m Model) updateTarget(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyUp:
-			if m.target.cursor > 0 {
-				m.target.cursor--
-			}
+			m.target.moveUp()
 			return m, nil
 
 		case tea.KeyDown:
-			if m.target.cursor < len(m.target.items)-1 {
-				m.target.cursor++
-			}
+			m.target.moveDown()
 			return m, nil
 
 		case tea.KeyEnter:
-			if len(m.target.items) == 0 {
-				return m, nil
-			}
-			item := m.target.items[m.target.cursor]
-			m.target.currentDir = item.path
-			m.target.items = loadDirItems(item.path)
-			m.target.cursor = 0
+			m.target.enter()
 			return m, nil
 
 		case tea.KeyBackspace:
-			parent := filepath.Dir(filepath.Clean(m.target.currentDir))
-			if parent != m.target.currentDir {
-				m.target.currentDir = parent
-				m.target.items = loadDirItems(parent)
-				m.target.cursor = 0
-			}
+			m.target.goBack()
 			return m, nil
 
 		case tea.KeyRight:

@@ -45,7 +45,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 	}
 
 	entries := s.BuildTree(context.Background(), files, nil, resolve)
-	want := filepath.Join("/target", "unsorted", "unknown.bin")
+	want := filepath.Join("/target", UnsortedDir, "unknown.bin")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
 	}
@@ -154,7 +154,7 @@ func TestBuildTree_LivePhotosDisabled(t *testing.T) {
 		t.Errorf("HEIC target dir = %q, want %q", filepath.Dir(entries[0].Target), want)
 	}
 	// .MOV should go to unsorted because livePhotos is disabled
-	wantUnsorted := filepath.Join("/target", "unsorted", "IMG_1234.MOV")
+	wantUnsorted := filepath.Join("/target", UnsortedDir, "IMG_1234.MOV")
 	if entries[1].Target != wantUnsorted {
 		t.Errorf("MOV target = %q, want %q", entries[1].Target, wantUnsorted)
 	}

@@ -12,6 +12,14 @@ import (
 	"photo-sorter/internal/scanner"
 )
 
+// UnsortedDir — имя директории для файлов без распознанной даты.
+const UnsortedDir = "unsorted"
+
+// IsUnsorted возвращает true, если target находится в директории unsorted.
+func IsUnsorted(target string) bool {
+	return filepath.Base(filepath.Dir(target)) == UnsortedDir
+}
+
 // Entry описывает одну операцию копирования.
 type Entry struct {
 	Source scanner.FileInfo
@@ -105,7 +113,7 @@ func (s *Sorter) BuildTree(
 
 		var target string
 		if !ok {
-			target = filepath.Join(s.targetRoot, "unsorted", f.Name)
+			target = filepath.Join(s.targetRoot, UnsortedDir, f.Name)
 		} else {
 			dir := filepath.Join(s.targetRoot, date.Format(s.layout))
 			target = filepath.Join(dir, f.Name)
