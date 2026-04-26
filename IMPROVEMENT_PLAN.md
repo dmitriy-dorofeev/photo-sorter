@@ -24,38 +24,7 @@
 
 ## 1. Критические баги и риск потери данных
 
-### 1.1 `internal/copier/copier.go:200-218` — Частично записанный файл остаётся на диске
-
-**Проблема:** если `io.Copy` завершится с ошибкой (диск заполнился, сеть упала), `defer destFile.Close()` закроет файл, но **битый файл останется в целевой папке**. Пользователь может подумать, что копирование успешно, а на самом деле файл обрезан.
-
-```go
-_, err = io.Copy(destFile, sourceFile)
-if err != nil {
-    return err  // ← файл остаётся битым
-}
-```
-
-**Как исправить:**
-```go
-_, err = io.Copy(destFile, sourceFile)
-if err != nil {
-    _ = destFile.Close()
-    _ = os.Remove(dst)
-    return fmt.Errorf("copy %s → %s: %w", src, dst, err)
-}
-```
-
-### 1.2 `internal/copier/copier.go:91-100` + `findFreeName` — TOCTOU + Race Condition
-
-**Проблема:** между `os.Stat(target)` и `copyFile` (которая делает `os.Create`) другой процесс может создать файл. Это классическая TOCTOU-уязвимость. Кроме того, если целевой путь — symlink на важный системный файл, `os.Create` перезапишет его.
-
-**Как исправить:**
-- Использовать `os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)` для атомарного создания.
-- Если `EEXIST` — fallback на `findFreeName` с той же логикой `O_EXCL`.
-- Добавить `sanitizeTargetPath` с проверкой `filepath.Rel(targetRoot, dst)` не начинается с `..` (path traversal).
-- Перед записью проверять `os.Lstat` на symlink (или использовать `O_NOFOLLOW` где возможно).
-
-### 1.3 `cmd/update.go:214` — Некорректные права на бинарник (`0111` вместо `0o111`)
+### 1.1 `cmd/update.go:214` — Некорректные права на бинарник (`0111` вместо `0o111`)
 
 **Проблема:** в Go литерал `0111` — **десятичное** число 111 (`0o157`), а не восьмеричное `0o111`. Получаются случайные права доступа.
 
@@ -68,13 +37,13 @@ os.FileMode(hdr.Mode|0111)  // ← баг!
 os.FileMode(hdr.Mode) | 0o111
 ```
 
-### 1.4 `cmd/update.go:167-185` — Скачивание без таймаута
+### 1.2 `cmd/update.go:167-185` — Скачивание без таймаута
 
 **Проблема:** `http.Get(url)` использует дефолтный `http.Client` без таймаута. При проблемах с сетью программа зависнет навсегда.
 
 **Как исправить:** использовать `http.Client{Timeout: ...}` (как в `fetchLatestReleaseRaw`), либо ещё лучше — `context.WithTimeout`.
 
-### 1.5 `tui/copy.go:16-17, 65-67` — Глобальные атомики портят прогресс при повторном запуске
+### 1.3 `tui/copy.go:16-17, 65-67` — Глобальные атомики портят прогресс при повторном запуске
 
 **Проблема:** `copyCurrent` и `copyTotal` — package-level `atomic.Int64`. Если пользователь быстро перезапустит копирование (через "начать заново"), старая goroutine продолжит писать в эти же атомики. Прогресс-бар покажет мусор.
 
@@ -654,31 +623,29 @@ const (
 ## Приоритетный план действий (рекомендация по порядку исправления)
 
 ### P0 — Критично (блокер релиза)
-1. `copier.go` — cleanup битых файлов при ошибке `io.Copy`.
-2. `copier.go` — `O_EXCL` + path traversal + symlink check.
-3. `video.go` — `--` перед `path` + `CommandContext`.
-4. `update.go` — исправить `0111` на `0o111` + таймаут на скачивание.
-5. `copy.go` — убрать глобальные атомики, починить утечку goroutine.
+1. `video.go` — `--` перед `path` + `CommandContext`.
+2. `update.go` — исправить `0111` на `0o111` + таймаут на скачивание.
+3. `copy.go` — убрать глобальные атомики, починить утечку goroutine.
 
 ### P1 — Высокий (безопасность и стабильность)
-6. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
-7. `runner.go` — прокинуть `ctx` во все этапы pipeline.
-8. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
-9. `copier.go` — точный подсчёт свободного места.
+4. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
+5. `runner.go` — прокинуть `ctx` во все этапы pipeline.
+6. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
+7. `copier.go` — точный подсчёт свободного места.
 
 ### P2 — Средний (производительность и UX)
-10. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
-11. `video.go` — batch-вызов `exiftool` для всех видео.
-12. `hasher.go` — убрать лишний `bufio.NewReader`.
-13. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
-14. `scan.go` — реальный прогресс вместо фейкового.
-15. `main.go` — починить валидацию шаблона даты.
+8. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
+9. `video.go` — batch-вызов `exiftool` для всех видео.
+10. `hasher.go` — убрать лишний `bufio.NewReader`.
+11. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
+12. `scan.go` — реальный прогресс вместо фейкового.
+13. `main.go` — починить валидацию шаблона даты.
 
 ### P3 — Низкий (рефакторинг и мелочи)
-16. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
-17. Вынести общие дефолты в `internal/config`.
-18. Добавить benchmark и fuzz тесты.
-19. Убрать магические строки/числа в константы.
+14. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
+15. Вынести общие дефолты в `internal/config`.
+16. Добавить benchmark и fuzz тесты.
+17. Убрать магические строки/числа в константы.
 
 ---
 

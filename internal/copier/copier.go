@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"golang.org/x/sys/unix"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/sorter"
-	"golang.org/x/sys/unix"
 )
 
 // Stats содержит результат операции копирования.
@@ -204,16 +204,40 @@ func copyFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
-	destFile, err := os.Create(dst)
+	// Создаём временный файл в той же директории для атомарного rename.
+	// Это решает две проблемы:
+	// 1. При ошибке io.Copy не остаётся битого файла на месте назначения.
+	// 2. Не следуем по symlink (O_EXCL + rename заменяет symlink, а не пишет через него).
+	dir := filepath.Dir(dst)
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(dst)+".tmp.")
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	tmpPath := tmpFile.Name()
 
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
+	// cleanup удаляет временный файл при любой ошибке.
+	cleanup := true
+	defer func() {
+		tmpFile.Close()
+		if cleanup {
+			os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := io.Copy(tmpFile, sourceFile); err != nil {
 		return err
 	}
 
-	return destFile.Sync()
+	if err := tmpFile.Sync(); err != nil {
+		return err
+	}
+	if err := tmpFile.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Rename(tmpPath, dst); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
 }
