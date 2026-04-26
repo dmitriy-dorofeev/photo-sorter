@@ -22,7 +22,7 @@
 photo-sorter/
 ├── cmd/
 │   ├── main.go                    # Точка входа: TUI или CLI
-│   └── main_test.go               # CLI-тесты (help, dry-run, json, validation)
+│   └── main_test.go               # CLI-тесты (help, json, validation)
 ├── internal/                      # Приватные пакеты (стандартный Go layout)
 │   ├── runner/
 │   │   ├── runner.go              # Единый pipeline scan → dedup → sort для TUI и CLI
@@ -45,7 +45,7 @@ photo-sorter/
 │   │   ├── sorter.go              # Построение целевого дерева, разрешение коллизий
 │   │   └── sorter_test.go
 │   ├── copier/
-│   │   ├── copier.go              # Копирование с проверкой диска, dry-run, отмена
+│   │   ├── copier.go              # Копирование с проверкой диска, отмена
 │   │   └── copier_test.go
 │   ├── logger/
 │   │   └── logger.go              # Запись логов операций с timestamp
@@ -183,7 +183,7 @@ go test ./internal/ -run TestCancellation -v
 ## Безопасность
 
 - **Только копирование** — приложение никогда не перемещает и не удаляет исходные файлы.
-- **Dry-run по умолчанию** — в настройках TUI флаг `dry_run` включён по умолчанию. В этом режиме файлы не создаются, только выводится отчёт.
+
 - **Логирование** — каждый запуск сохраняет статистику в файл лога в целевой директории.
 - **Unknown date → `unsorted/`** — файлы без распознаваемой даты не отбрасываются, а кладутся в отдельную папку.
 

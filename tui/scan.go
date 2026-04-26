@@ -80,7 +80,6 @@ func (m Model) startScan() tea.Cmd {
 		Template:     m.GetSettingString("template"),
 		LivePhotos:   m.GetSettingBool("live_photos"),
 		IncludeVideo: m.GetSettingBool("include_video"),
-		DryRun:       m.GetSettingBool("dry_run"),
 		UseMTime:     m.GetSettingBool("use_mtime"),
 	}
 

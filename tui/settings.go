@@ -110,13 +110,6 @@ func newSettingsModel() settingsModel {
 				stype: settingTypeBool,
 			},
 			{
-				label: "Dry-run (пробный прогон)",
-				key:   "dry_run",
-				help:  "Показать результат без копирования",
-				value: true,
-				stype: settingTypeBool,
-			},
-			{
 				label: "Использовать дату изменения",
 				key:   "use_mtime",
 				help:  "Если нет EXIF/имени, использовать ModTime файла",

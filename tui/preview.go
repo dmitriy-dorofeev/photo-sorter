@@ -35,7 +35,7 @@ func (m Model) viewPreview() string {
 
 	b.WriteString(titleStyle.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 5. Предпросмотр (dry-run)"))
+	b.WriteString(subtitleStyle.Render("Шаг 5. Предпросмотр"))
 	b.WriteString("\n\n")
 
 	st := m.computeScanStats()
@@ -92,11 +92,7 @@ func (m Model) viewPreview() string {
 		b.WriteString("\n")
 	}
 
-	dryRun := ""
-	if m.GetSettingBool("dry_run") {
-		dryRun = " (dry-run)"
-	}
-	b.WriteString(helpStyle.Render(fmt.Sprintf("← — назад • enter — запустить копирование%s • esc — выход", dryRun)))
+	b.WriteString(helpStyle.Render("← — назад • enter — запустить копирование • esc — выход"))
 	return b.String()
 }
 

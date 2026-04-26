@@ -52,7 +52,7 @@ func (m Model) startCopy() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.copyCancel = cancel
 
-	dryRun := m.GetSettingBool("dry_run")
+	dryRun := false
 
 	type result struct {
 		stats copier.Stats

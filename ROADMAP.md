@@ -86,7 +86,7 @@ go build -o photo-sorter cmd/main.go
 
 **Реализовано:**
 - `scan.go` — реальное сканирование с этапами (scanner → deduper → sorter), статистика по завершении
-- `preview.go` — дерево целевых папок, дубли, unsorted, dry-run индикатор
+- `preview.go` — дерево целевых папок, дубли, unsorted
 - `copy.go` — `copier.Copy` с `context.Context`, progress callback, atomic counters, логирование результатов
 - `settings.go` — запуск сканирования при переходе с настроек
 
@@ -128,6 +128,6 @@ go build -o photo-sorter cmd/main.go
 - [x] Дописать `README.md` и `PLAN.md`.
 - [ ] Сделать первый запуск на реальных данных:
   1. Подключить внешний диск.
-  2. Запустить `dry-run`.
+  2. Запустить пробный прогон (`--dry-run`).
   3. Проверить даты и дубли вручную.
   4. Запустить реальное копирование.
