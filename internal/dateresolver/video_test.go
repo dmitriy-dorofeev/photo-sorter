@@ -108,6 +108,23 @@ echo 'not json'
 	}
 }
 
+func TestExtractVideoDate_FlagInjection(t *testing.T) {
+	// Имя файла начинается с "-" — без "--" exiftool интерпретировал бы его как флаг.
+	script := `#!/bin/sh
+echo '[{"SourceFile":"'$5'","CreateDate":"2024:06:15 10:20:30"}]'
+`
+	fake := writeFakeExifTool(t, script)
+
+	got, ok := extractVideoDate("-overwrite_original.mp4", fake)
+	if !ok {
+		t.Fatal("expected ok=true even for path starting with dash")
+	}
+	want := time.Date(2024, 6, 15, 10, 20, 30, 0, time.UTC)
+	if !got.Equal(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
 func TestResolve_VideoPriority(t *testing.T) {
 	// Видео с метаданными exiftool должно получить дату оттуда,
 	// а не из имени файла (даже если имя парсится).

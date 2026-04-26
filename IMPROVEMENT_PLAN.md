@@ -53,32 +53,7 @@ os.FileMode(hdr.Mode) | 0o111
 
 ## 2. Безопасность
 
-### 2.1 `internal/dateresolver/video.go:27-30` — Command/flag injection в `exiftool`
-
-**Проблема:** если имя файла начинается с `-`, `exiftool` интерпретирует его как опцию. Например, файл `-overwrite_original` может привести к порче соседних файлов.
-
-```go
-cmd := exec.Command(exifToolPath,
-    "-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
-    "-json", path,  // ← path может быть опцией!
-)
-```
-
-**Как исправить:** добавить `--` перед `path`:
-```go
-cmd := exec.Command(exifToolPath,
-    "-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
-    "-json", "--", path,
-)
-```
-
-### 2.2 `internal/dateresolver/video.go:31` — Нет таймаута для `exiftool`
-
-**Проблема:** `cmd.Output()` не принимает `context.Context`. При зависании `exiftool` на битом видео весь pipeline зависает.
-
-**Как исправить:** использовать `exec.CommandContext(ctx, ...)` с разумным таймаутом (например, 30 секунд).
-
-### 2.3 Path Traversal в `copier`
+### 2.1 Path Traversal в `copier`
 
 **Проблема:** `e.Target` формируется из пользовательского шаблона и имён файлов. Если злоумышленник положит файл с именем `../../../etc/cron.d/evil`, `os.MkdirAll` и `os.Create` создадут файлы за пределами `targetRoot`.
 
@@ -96,13 +71,13 @@ func validateTargetPath(targetRoot, target string) error {
 }
 ```
 
-### 2.4 Symlink attack в `copier`
+### 2.2 Symlink attack в `copier`
 
 **Проблема:** если в `target` уже есть symlink `2024/03/15/photo.jpg -> /etc/passwd`, `os.Create(dst)` перезапишет `/etc/passwd`.
 
 **Как исправить:** перед `os.Create` проверять `os.Lstat(target)`. Если `ModeSymlink` — удалять symlink (или возвращать ошибку). Либо открывать с `O_EXCL`.
 
-### 2.5 `internal/deduper/hasher.go` — Чтение named pipe/FIFO повиснет
+### 2.3 `internal/deduper/hasher.go` — Чтение named pipe/FIFO повиснет
 
 **Проблема:** `HashFile` открывает любой файл по пути без проверки `ModeType`. Если `path` — named pipe или device, `os.Open` повиснет.
 
@@ -623,29 +598,28 @@ const (
 ## Приоритетный план действий (рекомендация по порядку исправления)
 
 ### P0 — Критично (блокер релиза)
-1. `video.go` — `--` перед `path` + `CommandContext`.
-2. `update.go` — исправить `0111` на `0o111` + таймаут на скачивание.
-3. `copy.go` — убрать глобальные атомики, починить утечку goroutine.
+1. `update.go` — исправить `0111` на `0o111` + таймаут на скачивание.
+2. `copy.go` — убрать глобальные атомики, починить утечку goroutine.
 
 ### P1 — Высокий (безопасность и стабильность)
-4. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
-5. `runner.go` — прокинуть `ctx` во все этапы pipeline.
-6. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
-7. `copier.go` — точный подсчёт свободного места.
+3. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
+4. `runner.go` — прокинуть `ctx` во все этапы pipeline.
+5. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
+6. `copier.go` — точный подсчёт свободного места.
 
 ### P2 — Средний (производительность и UX)
-8. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
-9. `video.go` — batch-вызов `exiftool` для всех видео.
-10. `hasher.go` — убрать лишний `bufio.NewReader`.
-11. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
-12. `scan.go` — реальный прогресс вместо фейкового.
-13. `main.go` — починить валидацию шаблона даты.
+7. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
+8. `video.go` — batch-вызов `exiftool` для всех видео.
+9. `hasher.go` — убрать лишний `bufio.NewReader`.
+10. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
+11. `scan.go` — реальный прогресс вместо фейкового.
+12. `main.go` — починить валидацию шаблона даты.
 
 ### P3 — Низкий (рефакторинг и мелочи)
-14. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
-15. Вынести общие дефолты в `internal/config`.
-16. Добавить benchmark и fuzz тесты.
-17. Убрать магические строки/числа в константы.
+13. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
+14. Вынести общие дефолты в `internal/config`.
+15. Добавить benchmark и fuzz тесты.
+16. Убрать магические строки/числа в константы.
 
 ---
 

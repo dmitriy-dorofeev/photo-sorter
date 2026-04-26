@@ -1,6 +1,7 @@
 package dateresolver
 
 import (
+	"context"
 	"encoding/json"
 	"os/exec"
 	"time"
@@ -24,9 +25,12 @@ func extractVideoDate(path, exifToolPath string) (time.Time, bool) {
 		exifToolPath = "exiftool"
 	}
 
-	cmd := exec.Command(exifToolPath,
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, exifToolPath,
 		"-DateTimeOriginal", "-CreateDate", "-MediaCreateDate",
-		"-json", path,
+		"-json", "--", path,
 	)
 	out, err := cmd.Output()
 	if err != nil {
