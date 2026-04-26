@@ -88,6 +88,7 @@ func main() {
 
 Использование:
   photo-sorter [флаги]
+  photo-sorter update
 
 Основные флаги:
   --source string      Исходная папка (обязательно, можно несколько)
@@ -103,6 +104,10 @@ func main() {
 Вывод:
   --format string      Формат отчёта: text | json (default: "text")
   --version            Показать версию и выйти
+
+Обновление:
+  --check-update       Проверить наличие новой версии
+  update               Установить последнюю версию
 
 Примеры:
   photo-sorter --source ./photos --target ./sorted
