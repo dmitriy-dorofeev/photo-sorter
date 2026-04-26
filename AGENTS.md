@@ -90,6 +90,12 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 # Проверка версии
 ./photo-sorter --version
 
+# Проверить наличие обновлений
+./photo-sorter --check-update
+
+# Автоматическое обновление до последней версии
+./photo-sorter update
+
 # Запуск в TUI-режиме (по умолчанию)
 ./photo-sorter
 

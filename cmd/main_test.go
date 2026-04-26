@@ -8,6 +8,42 @@ import (
 	"testing"
 )
 
+func TestCLIVersion(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "--version")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--version failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "dev") && !strings.Contains(output, "v") {
+		t.Errorf("unexpected version output: %s", output)
+	}
+}
+
+func TestCLICheckUpdateDev(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "--check-update")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("--check-update failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "dev") {
+		t.Errorf("expected dev version message, got: %s", output)
+	}
+}
+
+func TestCLIUpdateDev(t *testing.T) {
+	cmd := exec.Command("go", "run", ".", "update")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error for dev version update, got: %s", out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "dev") {
+		t.Errorf("expected dev version message, got: %s", output)
+	}
+}
+
 func TestCLIHelp(t *testing.T) {
 	cmd := exec.Command("go", "run", ".", "--help")
 	out, err := cmd.CombinedOutput()

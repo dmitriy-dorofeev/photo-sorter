@@ -51,6 +51,12 @@ type jsonReport struct {
 }
 
 func main() {
+	// Подкоманда update не использует стандартный flag.Parse.
+	if len(os.Args) > 1 && os.Args[1] == "update" {
+		runUpdate()
+		return
+	}
+
 	var (
 		sources      stringSlice
 		target       string
@@ -62,6 +68,7 @@ func main() {
 		format       string
 		useTUI       bool
 		versionFlag  bool
+		checkUpdate  bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -74,6 +81,7 @@ func main() {
 	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
+	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -107,6 +115,11 @@ func main() {
 
 	if versionFlag {
 		fmt.Println(version)
+		os.Exit(0)
+	}
+
+	if checkUpdate {
+		runCheckUpdate()
 		os.Exit(0)
 	}
 
