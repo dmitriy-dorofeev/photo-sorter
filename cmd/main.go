@@ -173,7 +173,11 @@ func main() {
 	for _, src := range sources {
 		info, err := os.Stat(src)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка недоступна: %s\n", src)
+			if os.IsNotExist(err) {
+				fmt.Fprintf(os.Stderr, "Ошибка: исходная папка не существует: %s\n", src)
+			} else {
+				fmt.Fprintf(os.Stderr, "Ошибка: исходная папка недоступна: %s\n", src)
+			}
 			os.Exit(1)
 		}
 		if !info.IsDir() {
@@ -220,14 +224,38 @@ func main() {
 	}
 }
 
-func printTextReport(res runner.Result, stats copier.Stats) {
-	st := res.Stats()
-	var unsortedFiles []string
-	for _, e := range res.Entries {
+// errorStrings преобразует []error в []string для JSON-отчёта.
+func errorStrings(errs []error) []string {
+	if len(errs) == 0 {
+		return nil
+	}
+	result := make([]string, len(errs))
+	for i, e := range errs {
+		result[i] = e.Error()
+	}
+	return result
+}
+
+// collectUnsortedFiles возвращает список файлов без даты из entries.
+// Если useBase=true — возвращает только имена файлов (для текстового отчёта),
+// иначе — полные пути к исходникам (для JSON).
+func collectUnsortedFiles(entries []sorter.Entry, useBase bool) []string {
+	var files []string
+	for _, e := range entries {
 		if !e.Skip && sorter.IsUnsorted(e.Target) {
-			unsortedFiles = append(unsortedFiles, filepath.Base(e.Target))
+			if useBase {
+				files = append(files, filepath.Base(e.Target))
+			} else {
+				files = append(files, e.Source.Path)
+			}
 		}
 	}
+	return files
+}
+
+func printTextReport(res runner.Result, stats copier.Stats) {
+	st := res.Stats()
+	unsortedFiles := collectUnsortedFiles(res.Entries, true)
 
 	fmt.Printf("Найдено файлов:      %d\n", st.Total)
 	fmt.Printf("Определено дат:       %d\n", st.WithDate)
@@ -244,7 +272,7 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 		fmt.Println()
 		fmt.Println("Ошибки:")
 		for _, e := range stats.ErrorList {
-			fmt.Printf("  %s\n", e)
+			fmt.Printf("  %s\n", e.Error())
 		}
 	}
 
@@ -270,14 +298,8 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 
 func printJSONReport(res runner.Result, stats copier.Stats) {
 	st := res.Stats()
-	var unsortedFiles []string
+	unsortedFiles := collectUnsortedFiles(res.Entries, false)
 	var dupGroups []jsonDupGroup
-
-	for _, e := range res.Entries {
-		if !e.Skip && sorter.IsUnsorted(e.Target) {
-			unsortedFiles = append(unsortedFiles, e.Source.Path)
-		}
-	}
 
 	for _, g := range res.Duplicates {
 		var dups []string
@@ -299,7 +321,7 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 		Skipped:         stats.Skipped,
 		Errors:          stats.Errors,
 		BytesCopied:     stats.BytesCopied,
-		ErrorList:       stats.ErrorList,
+		ErrorList:       errorStrings(stats.ErrorList),
 		DuplicateGroups: dupGroups,
 		UnsortedFiles:   unsortedFiles,
 	}

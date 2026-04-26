@@ -16,8 +16,9 @@ import (
 // ---------------------------------------------------------------------------
 
 type templatePreset struct {
-	label string // например "YYYY/MM/DD"
-	value string // Go layout, например "2006/01/02"
+	label    string // например "YYYY/MM/DD"
+	value    string // Go layout, например "2006/01/02"
+	isCustom bool   // true для "Свой формат…"
 }
 
 var templatePresets = []templatePreset{
@@ -25,7 +26,7 @@ var templatePresets = []templatePreset{
 	{label: "YYYY/MM/DD", value: "2006/01/02"},
 	{label: "YYYY/MM", value: "2006/01"},
 	{label: "YYYY", value: "2006"},
-	{label: "Свой формат…", value: ""},
+	{label: "Свой формат…", value: "", isCustom: true},
 }
 
 // findPreset ищет пресет по Go-значению. Возвращает индекс и found.
@@ -35,7 +36,13 @@ func findPreset(value string) (int, bool) {
 			return i, true
 		}
 	}
-	return len(templatePresets) - 1, false // указываем на "Свой формат…"
+	// Не найден — ищем пользовательский пресет по флагу isCustom
+	for i, p := range templatePresets {
+		if p.isCustom {
+			return i, false
+		}
+	}
+	return 0, false
 }
 
 // formatTemplateDisplay возвращает человекочитаемое представление шаблона.
@@ -164,7 +171,7 @@ func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyEnter, tea.KeySpace:
 			preset := templatePresets[m.settings.templateCursor]
-			if preset.label == "Свой формат…" {
+			if preset.isCustom {
 				// Переходим в ручной ввод
 				m.settings.templateSelect = false
 				m.settings.editing = true

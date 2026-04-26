@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -96,8 +97,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updatePreview(msg)
 	case ScreenCopy:
 		return m.updateCopy(msg)
+	default:
+		panic(fmt.Sprintf("unknown screen: %d", m.screen))
 	}
-	return m, nil
 }
 
 func (m Model) View() string {
@@ -114,8 +116,9 @@ func (m Model) View() string {
 		return m.viewPreview()
 	case ScreenCopy:
 		return m.viewCopy()
+	default:
+		panic(fmt.Sprintf("unknown screen: %d", m.screen))
 	}
-	return ""
 }
 
 func (m Model) resetToSources() (tea.Model, tea.Cmd) {

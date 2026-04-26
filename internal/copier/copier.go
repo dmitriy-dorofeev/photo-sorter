@@ -20,7 +20,7 @@ type Stats struct {
 	Skipped     int
 	Errors      int
 	BytesCopied int64
-	ErrorList   []string // до 10 первых ошибок для отчёта
+	ErrorList   []error // до 10 первых ошибок для отчёта
 }
 
 // Copier выполняет копирование файлов.
@@ -114,7 +114,16 @@ func (c *Copier) Copy(
 					consecutiveErrors = 0
 					continue
 				}
-				target = findFreeName(target)
+				newTarget, err := findFreeName(target)
+				if err != nil {
+					stats.Errors++
+					c.recordError(&stats, err)
+					if c.shouldAbort(&consecutiveErrors) {
+						return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+					}
+					continue
+				}
+				target = newTarget
 			}
 		}
 
@@ -157,7 +166,7 @@ func syncDir(path string) error {
 // recordError добавляет ошибку в ErrorList (максимум 10 записей).
 func (c *Copier) recordError(stats *Stats, err error) {
 	if len(stats.ErrorList) < 10 {
-		stats.ErrorList = append(stats.ErrorList, err.Error())
+		stats.ErrorList = append(stats.ErrorList, err)
 	}
 }
 
@@ -244,16 +253,18 @@ func validateTargetPath(targetRoot, target string) error {
 	return nil
 }
 
-func findFreeName(target string) string {
+func findFreeName(target string) (string, error) {
 	dir := filepath.Dir(target)
 	ext := filepath.Ext(target)
 	base := strings.TrimSuffix(filepath.Base(target), ext)
-	for i := 1; ; i++ {
+	const maxIterations = 10000
+	for i := 1; i <= maxIterations; i++ {
 		candidate := filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
+			return candidate, nil
 		}
 	}
+	return "", fmt.Errorf("cannot find free name for %s after %d attempts", target, maxIterations)
 }
 
 func copyFile(src, dst string) error {

@@ -154,74 +154,16 @@
 
 ## 8. Качество кода и мелочи
 
-### 8.1 `internal/dateresolver/video.go:10-17` — Мёртвый код uppercase расширений
+✅ **Все пункты выполнены.**
 
-**Проблема:** `scanner` всегда отдаёт lowercase расширения. Проверка `.MOV`, `.MP4` и т.д. — никогда не сработает.
-
-**Как исправить:** оставить только lowercase:
-```go
-switch ext {
-case ".mov", ".mp4", ".avi", ".mkv":
-    return true
-}
-```
-
-### 8.2 `internal/sorter/sorter.go:99` — Магическая строка `"unsorted"`
-
-**Проблема:** захардкожено в 3+ местах. Если пользователь уже имеет папку с таким именем — конфликт.
-
-**Как исправить:** вынести в константу:
-```go
-const UnsortedDir = "unsorted"
-```
-
-### 8.3 `internal/copier/copier.go:188-198` — `findFreeName` без защиты от переполнения
-
-**Проблема:** бесконечный цикл `for i := 1; ; i++`. Теоретически, если в директории 2^31 файлов с одинаковым префиксом, цикл не завершится.
-
-**Как исправить:** добавить `maxIterations := 10000` и возвращать ошибку при превышении.
-
-### 8.4 `internal/copier/copier.go:122-127` — `ErrorList` как `[]string`
-
-**Проблема:** теряется тип ошибки и возможность `errors.Is` / `errors.As`.
-
-**Как исправить:** сделать `ErrorList []error`, а для JSON/текста конвертировать через `err.Error()` при рендеринге.
-
-### 8.5 `tui/model.go:73-89` — Нет `default` в switch по `m.screen`
-
-**Проблема:** если добавят новый экран и забудут case, UI "замрёт" — не будет ни реакции, ни ошибки.
-
-**Как исправить:**
-```go
-default:
-    panic(fmt.Sprintf("unknown screen: %d", m.screen))
-```
-
-### 8.6 `internal/dateresolver/filename.go` — Magic numbers без имен
-
-**Проблема:** парсеры дат используют индексы подстрок (`4:8`, `0:4` и т.д.) без именованных констант. Сложно читать и поддерживать.
-
-**Как исправить:** добавить константы:
-```go
-const (
-    samsungYearStart  = 4
-    samsungYearEnd    = 8
-    samsungMonthStart = 8
-    // ...
-)
-```
-
-### 8.7 `cmd/main.go:204-213` / `260-269` — Дублирование логики подсчёта
-
-**Проблема:** идентичные циклы в `printTextReport` и `printJSONReport`.
-
-**Как исправить:** выделить функцию `computeReportStats(entries []sorter.Entry) (withDate, unsorted, dupCount int, unsortedFiles []string)`.
-
-### 8.8 `tui/settings.go:47` — `findPreset` завязан на порядок слайса
-
-**Проблема:** `return len(templatePresets) - 1, false` предполагает, что последний элемент — всегда `"Свой формат…"`. Добавление пресета в конец сломает логику.
-
-**Как исправить:** искать по значению или по специальному флагу `IsCustom bool`.
+- **8.1 Мёртвый код uppercase** — уже очищен в `internal/dateresolver/video.go` в рамках раздела 3.6. Остались только lowercase кейсы с комментарием о контракте lowercase `Ext`.
+- **8.2 Магическая строка `"unsorted"`** — вынесена в константу `sorter.UnsortedDir` и функцию `sorter.IsUnsorted` в рамках раздела 3.4.
+- **8.3 Защита `findFreeName` от переполнения** — добавлен `const maxIterations = 10000`. Функция возвращает `(string, error)`; при превышении лимита возвращается ошибка, которая обрабатывается в `Copy` как обычная ошибка копирования.
+- **8.4 `ErrorList` как `[]error`** — `copier.Stats.ErrorList` изменён на `[]error`. `recordError` сохраняет тип ошибки. Для JSON/текста добавлена функция `errorStrings()`. В `tui/copy.go` лог использует `e.Error()`.
+- **8.5 `default` в switch по экранам** — в `tui/model.go` добавлен `default: panic(fmt.Sprintf("unknown screen: %d", m.screen))` в `Update` и `View`.
+- **8.6 Magic numbers в `filename.go`** — в `parsePXL` добавлены именованные константы `pxlPrefixLen`, `pxlCoreLen`, `pxlCoreEnd`, `pxlTotalLen`.
+- **8.7 Дублирование подсчёта unsorted** — в `cmd/main.go` выделена функция `collectUnsortedFiles(entries []sorter.Entry, useBase bool) []string`, используемая в `printTextReport` и `printJSONReport`.
+- **8.8 `findPreset` завязан на порядок** — в `templatePreset` добавлен флаг `isCustom bool`. `findPreset` ищет пользовательский пресет по `isCustom`, а не по индексу последнего элемента.
 
 ---
 

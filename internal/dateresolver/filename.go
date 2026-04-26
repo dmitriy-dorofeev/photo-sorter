@@ -78,14 +78,22 @@ func parseVID(name string) (time.Time, bool) {
 // PXL_YYYYMMDD_HHMMSSmmm
 // Пример: "PXL_20240315_143022123"
 // Миллисекунды отбрасываем — парсим только базовую часть дата+время.
+const (
+	pxlPrefix    = "PXL_"
+	pxlTotalLen  = len("PXL_20060102_150405000") // 22
+	pxlPrefixLen = len(pxlPrefix)                // 4
+	pxlCoreLen   = 15                            // "20060102_150405"
+	pxlCoreEnd   = pxlPrefixLen + pxlCoreLen     // 19
+)
+
 func parsePXL(name string) (time.Time, bool) {
-	if !strings.HasPrefix(name, "PXL_") {
+	if !strings.HasPrefix(name, pxlPrefix) {
 		return time.Time{}, false
 	}
-	if len(name) != len("PXL_20060102_150405000") {
+	if len(name) != pxlTotalLen {
 		return time.Time{}, false
 	}
-	core := name[4:19] // "20060102_150405"
+	core := name[pxlPrefixLen:pxlCoreEnd] // "20060102_150405"
 	t, err := time.ParseInLocation("20060102_150405", core, time.Local)
 	return t, err == nil
 }
