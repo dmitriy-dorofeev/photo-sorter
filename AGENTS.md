@@ -85,7 +85,7 @@ photo-sorter/
 make build
 
 # Или вручную с указанием версии
-go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter cmd/main.go
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter ./cmd
 
 # Проверка версии
 ./photo-sorter --version

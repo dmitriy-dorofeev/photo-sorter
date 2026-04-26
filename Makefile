@@ -7,7 +7,7 @@ VERSION ?= $(shell git describe --tags --always --dirty)
 LDFLAGS := -ldflags "-X main.version=$(VERSION) -s -w"
 
 build:
-	go build $(LDFLAGS) -o bin/photo-sorter cmd/main.go
+	go build $(LDFLAGS) -o bin/photo-sorter ./cmd
 
 clean:
 	rm -rf bin/ dist/

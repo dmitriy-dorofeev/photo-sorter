@@ -65,7 +65,7 @@ make build
 ### Вручную через go build
 
 ```bash
-go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter cmd/main.go
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter ./cmd
 ```
 
 > Флаг `-ldflags "-X main.version=..."` встраивает версию в бинарник. Без него приложение сообщит версию `dev`.
