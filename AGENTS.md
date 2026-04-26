@@ -8,7 +8,7 @@
 
 ## Технологический стек
 
-- **Язык**: Go 1.25.0 (минимальная требуемая версия — 1.24+)
+- **Язык**: Go 1.25.0 (минимальная требуемая версия — 1.25+)
 - **TUI-фреймворк**: [Charm Bracelet](https://charm.sh/) — `bubbletea` + `bubbles` + `lipgloss`
 - **EXIF**: `github.com/rwcarlsen/goexif` (только JPEG)
 - **Хеширование**: `github.com/cespare/xxhash/v2` (дедупликация)
@@ -22,7 +22,8 @@
 photo-sorter/
 ├── cmd/
 │   ├── main.go                    # Точка входа: TUI или CLI
-│   └── main_test.go               # CLI-тесты (help, json, validation)
+│   ├── main_test.go               # CLI-тесты (help, json, validation)
+│   └── update.go                  # Логика self-update (подкоманда update)
 ├── internal/                      # Приватные пакеты (стандартный Go layout)
 │   ├── runner/
 │   │   ├── runner.go              # Единый pipeline scan → dedup → sort для TUI и CLI
@@ -49,6 +50,9 @@ photo-sorter/
 │   │   └── copier_test.go
 │   ├── logger/
 │   │   └── logger.go              # Запись логов операций с timestamp
+│   ├── updater/
+│   │   ├── updater.go             # Проверка и установка обновлений с GitHub Releases
+│   │   └── updater_test.go
 │   └── integration_test.go        # E2E-тест: полный pipeline scanner → copier
 ├── tui/                           # Интерактивный интерфейс на bubbletea
 │   ├── tui.go                     # Запуск программы bubbletea
@@ -64,18 +68,20 @@ photo-sorter/
 │   ├── dateresolver/minimal.jpg   # JPEG с реальными EXIF-данными (2024-03-15)
 │   ├── deduper/                   # Бинарные файлы для тестов хеширования и дедупликации
 │   └── e2e/source/                # Полный набор файлов для integration_test.go
+├── Makefile                       # Команды build, test, snapshot
+├── .goreleaser.yaml               # Конфигурация GoReleaser
+├── .github/workflows/release.yml  # CI: автоматический релиз по git-тегу
+├── bin/                           # Директория для собранного бинарника
 ├── go.mod
 ├── go.sum
-├── README.md
-├── PLAN.md                        # Детальный план разработки (на русском)
-└── ROADMAP.md                     # Пошаговый roadmap с чеклистами
+└── README.md                      # Пользовательская документация
 ```
 
 ## Сборка и запуск
 
 ### Требования
 
-- Go 1.24+
+- Go 1.25+
 - `exiftool` (опционально, рекомендуется для видео)
 
 ### Команды
@@ -137,6 +143,7 @@ make snapshot
 4. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
 5. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу, поддержка `context.Context` (отмена), progress callback.
 6. **logger** — после копирования создаёт лог-файл `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` в целевой папке.
+7. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ## Тестирование
 
@@ -147,7 +154,7 @@ make snapshot
 - **Фикстуры** — реальные и сгенерированные файлы в `testdata/`:
   - `minimal.jpg` — JPEG с валидным EXIF-блоком (дата 2024-03-15 14:30:22).
   - `deduper/*.bin` — бинарные файлы разного размера и содержимого для тестов хешей.
-  - `e2e/source/` — набор из 22 файлов, имитирующих разные сценарии (iPhone, Android, WhatsApp, Signal, Pixel, Screenshot, DSC, дубликаты, Live Photos, файлы без даты, видео).
+  - `e2e/source/` — набор из 20 файлов в подпапках `2023/` и `2024/`, имитирующих разные сценарии (iPhone, Android, WhatsApp, Signal, Pixel, Screenshot, DSC, дубликаты, Live Photos, файлы без даты, видео).
 
 ### Запуск тестов
 
@@ -169,7 +176,8 @@ go test ./internal/ -run TestCancellation -v
 - Файлы `dup1.jpg` и `dup2.jpg` в `e2e/source/2023/` — копии `minimal.jpg` (одинаковое содержимое, разные имена).
 - `live_photo.HEIC` + `live_photo.MOV` — тестовая пара Live Photos.
 - `photo_no_date.jpg` — псевдо-JPEG без EXIF и без узнаваемого имени; при `UseModTime=false` идёт в `unsorted/`.
-- `video.mp4` — видео без поддерживаемых метаданных; тестирует fallback на `mtime`.
+- `video.mp4` (в `2023/`) — видео без поддерживаемых метаданных; тестирует fallback на `mtime`.
+- `root_photo.jpg` (в корне `e2e/source/`) — дополнительный файл для проверки обработки корневого уровня.
 
 ## Соглашения по коду
 
@@ -210,6 +218,4 @@ go test ./internal/ -run TestCancellation -v
 
 ## Полезные ссылки внутри проекта
 
-- `PLAN.md` — детальный технический план с описанием алгоритмов.
-- `ROADMAP.md` — пошаговый roadmap с чеклистами выполненных и предстоящих задач.
 - `README.md` — пользовательская документация (установка, запуск, навигация).
