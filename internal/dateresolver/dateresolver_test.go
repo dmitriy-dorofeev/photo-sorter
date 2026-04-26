@@ -185,8 +185,9 @@ func TestResolve_Priority(t *testing.T) {
 		}
 	})
 
-	t.Run("mtime fallback disabled by default", func(t *testing.T) {
-		r := New() // UseModTime = false по умолчанию
+	t.Run("mtime fallback can be disabled", func(t *testing.T) {
+		r := New()
+		r.UseModTime = false
 		f := scanner.FileInfo{
 			Path:    "/tmp/unknown.jpg",
 			Name:    "unknown.jpg",

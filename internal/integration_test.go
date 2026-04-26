@@ -29,8 +29,9 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("expected 12 files, got %d", len(files))
 	}
 
-	// 2. Resolve dates (UseModTime = false by default)
+	// 2. Resolve dates (UseModTime = true by default; force false for this test)
 	resolver := dateresolver.New()
+	resolver.UseModTime = false
 	dateMap := make(map[string]time.Time)
 	okMap := make(map[string]bool)
 	for _, f := range files {
@@ -266,6 +267,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	}
 
 	resolver := dateresolver.New()
+	resolver.UseModTime = false
 	dateMap := make(map[string]time.Time)
 	okMap := make(map[string]bool)
 	for _, f := range files {

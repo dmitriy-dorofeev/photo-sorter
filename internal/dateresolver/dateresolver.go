@@ -18,9 +18,9 @@ type Resolver struct {
 	ExifToolPath string
 }
 
-// New создаёт новый Resolver с UseModTime=false.
+// New создаёт новый Resolver с UseModTime=true.
 func New() *Resolver {
-	return &Resolver{UseModTime: false}
+	return &Resolver{UseModTime: true}
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.

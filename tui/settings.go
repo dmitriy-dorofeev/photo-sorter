@@ -120,7 +120,7 @@ func newSettingsModel() settingsModel {
 				label: "Использовать дату изменения",
 				key:   "use_mtime",
 				help:  "Если нет EXIF/имени, использовать ModTime файла",
-				value: false,
+				value: true,
 				stype: settingTypeBool,
 			},
 		},
