@@ -3,6 +3,7 @@
 package deduper
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -35,7 +36,7 @@ func New(files []scanner.FileInfo, livePhotos bool) *Deduper {
 //  2. Для групп с ≥2 файлами вычисляется xxhash.
 //  3. Группировка по хешу внутри размерной группы.
 //  4. Пары Live Photos (.HEIC + .MOV с одним basename) исключаются из дубликатов.
-func (d *Deduper) FindDuplicates() ([]Result, error) {
+func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 	if len(d.files) == 0 {
 		return nil, nil
 	}
@@ -57,6 +58,10 @@ func (d *Deduper) FindDuplicates() ([]Result, error) {
 	for _, group := range sizeGroups {
 		if len(group) < 2 {
 			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 
 		// 3. Вычисляем хеш для каждого файла в группе.

@@ -42,7 +42,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	// 1. Scan
 	sc := scanner.New(cfg.Sources, exts...)
-	files, err := sc.Scan()
+	files, err := sc.Scan(ctx)
 	if err != nil {
 		return res, fmt.Errorf("scan: %w", err)
 	}
@@ -53,7 +53,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	// 2. Dedup
 	d := deduper.New(files, cfg.LivePhotos)
-	res.Duplicates, err = d.FindDuplicates()
+	res.Duplicates, err = d.FindDuplicates(ctx)
 	if err != nil {
 		return res, fmt.Errorf("dedup: %w", err)
 	}
@@ -65,7 +65,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	dr := dateresolver.New()
 	dr.UseModTime = cfg.UseMTime
 	sort := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos)
-	res.Entries = sort.BuildTree(files, res.Duplicates, dr.Resolve)
+	res.Entries = sort.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
 	if progress != nil {
 		progress("sort", len(res.Entries), len(res.Entries))
 	}

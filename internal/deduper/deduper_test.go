@@ -1,6 +1,7 @@
 package deduper
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -153,7 +154,7 @@ func TestFindDuplicates(t *testing.T) {
 				livePhotos = false
 			}
 			d := New(tt.files, livePhotos)
-			got, err := d.FindDuplicates()
+			got, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
 			}

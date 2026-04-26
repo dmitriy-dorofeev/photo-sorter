@@ -2,6 +2,7 @@
 package sorter
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -43,6 +44,7 @@ func New(targetRoot, layout string, livePhotos bool) *Sorter {
 //  2. Разрешает коллизии имён внутри плана: _1, _2, …
 //  3. Live Photos: .MOV без даты получает дату от .HEIC/.HEIF с тем же basename.
 func (s *Sorter) BuildTree(
+	ctx context.Context,
 	files []scanner.FileInfo,
 	duplicates []deduper.Result,
 	resolveDate func(scanner.FileInfo) (time.Time, bool),
@@ -64,6 +66,9 @@ func (s *Sorter) BuildTree(
 	livePhotoDates := make(map[string]time.Time)
 
 	for _, f := range files {
+		if ctx.Err() != nil {
+			break
+		}
 		d, ok := resolveDate(f)
 		dateCache[f.Path] = dateResult{date: d, ok: ok}
 		if ok && s.livePhotos {
@@ -80,6 +85,9 @@ func (s *Sorter) BuildTree(
 	targetCounts := make(map[string]int) // для разрешения коллизий
 
 	for _, f := range files {
+		if ctx.Err() != nil {
+			break
+		}
 		res := dateCache[f.Path]
 		date, ok := res.date, res.ok
 

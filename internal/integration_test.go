@@ -21,7 +21,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 1. Scan (include .png for filename-date test)
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
-	files, err := sc.Scan()
+	files, err := sc.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 3. Find duplicates
 	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 4. Build tree
 	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
 	}
@@ -201,7 +201,7 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 	targetDir := t.TempDir()
 
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
-	files, err := sc.Scan()
+	files, err := sc.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
@@ -231,12 +231,12 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 
 	// Build tree: nothing should go to unsorted
 	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	unsortedCount := 0
 	for _, e := range entries {
@@ -264,7 +264,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	targetDir := t.TempDir()
 
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".png", ".mp4")
-	files, err := sc.Scan()
+	files, err := sc.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
@@ -324,12 +324,12 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 
 	// Build tree and verify targets
 	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	unsortedCount := 0
 	for _, e := range entries {
@@ -372,7 +372,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	os.WriteFile(fakeExifTool, []byte(script), 0755)
 
 	sc := scanner.New([]string{srcDir}, ".mov")
-	files, err := sc.Scan()
+	files, err := sc.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan failed: %v", err)
 	}
@@ -394,12 +394,12 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 
 	// Verify tree uses exiftool date
 	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
@@ -426,15 +426,15 @@ func TestCancellation(t *testing.T) {
 	targetDir := t.TempDir()
 
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
-	files, _ := sc.Scan()
+	files, _ := sc.Scan(context.Background())
 	resolver := dateresolver.New()
 	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates()
+	dupResults, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	c := copier.New(false, targetDir)

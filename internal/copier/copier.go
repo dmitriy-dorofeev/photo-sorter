@@ -148,6 +148,9 @@ func (c *Copier) shouldAbort(consecutiveErrors *int) bool {
 }
 
 func (c *Copier) checkDiskSpace(entries []sorter.Entry) error {
+	if c.dryRun {
+		return nil
+	}
 	var needed int64
 	for _, e := range entries {
 		if !e.Skip {
@@ -182,7 +185,7 @@ func availableSpace(path string) (uint64, error) {
 			return 0, err
 		}
 	}
-	return stat.Bavail * uint64(stat.Bsize), nil
+	return uint64(stat.Bavail) * uint64(stat.Bsize), nil
 }
 
 func findFreeName(target string) string {

@@ -3,10 +3,10 @@
 package scanner
 
 import (
+	"context"
 	"io/fs"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -43,17 +43,20 @@ func New(sources []string, exts ...string) *Scanner {
 
 // Scan рекурсивно обходит все исходные папки и возвращает список файлов.
 // Обход нескольких папок выполняется параллельно через errgroup.
-func (s *Scanner) Scan() ([]FileInfo, error) {
-	var mu sync.Mutex
-	var files []FileInfo
-	g := new(errgroup.Group)
+func (s *Scanner) Scan(ctx context.Context) ([]FileInfo, error) {
+	files := make([]FileInfo, 0, 1024)
+	g, ctx := errgroup.WithContext(ctx)
 
 	for _, src := range s.sources {
 		src := src
 		g.Go(func() error {
-			return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+			var local []FileInfo
+			err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
-					return err
+					if d != nil && d.IsDir() {
+						return filepath.SkipDir
+					}
+					return nil
 				}
 				if d.IsDir() {
 					return nil
@@ -66,20 +69,28 @@ func (s *Scanner) Scan() ([]FileInfo, error) {
 
 				info, err := d.Info()
 				if err != nil {
-					return err
+					return nil
 				}
 
-				mu.Lock()
-				files = append(files, FileInfo{
+				local = append(local, FileInfo{
 					Path:    path,
 					Name:    d.Name(),
 					Size:    info.Size(),
 					ModTime: info.ModTime(),
 					Ext:     ext,
 				})
-				mu.Unlock()
 				return nil
 			})
+			if err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				files = append(files, local...)
+				return nil
+			}
 		})
 	}
 

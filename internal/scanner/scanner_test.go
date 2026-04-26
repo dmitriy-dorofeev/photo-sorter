@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -14,7 +15,7 @@ func TestScan_FilterExtensions(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "c.mov"), []byte("cc"), 0644)
 
 	s := New([]string{dir}, ".jpg", ".mov")
-	files, err := s.Scan()
+	files, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -34,7 +35,7 @@ func TestScan_NoFilter(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "y"), []byte("yy"), 0644)
 
 	s := New([]string{dir})
-	files, err := s.Scan()
+	files, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -50,7 +51,7 @@ func TestScan_ParallelSources(t *testing.T) {
 	os.WriteFile(filepath.Join(dir2, "b.jpg"), []byte("bb"), 0644)
 
 	s := New([]string{dir1, dir2}, ".jpg")
-	files, err := s.Scan()
+	files, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}
@@ -71,7 +72,7 @@ func TestScan_Subdirs(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "sub", "nested.jpg"), []byte("n"), 0644)
 
 	s := New([]string{dir}, ".jpg")
-	files, err := s.Scan()
+	files, err := s.Scan(context.Background())
 	if err != nil {
 		t.Fatalf("scan: %v", err)
 	}

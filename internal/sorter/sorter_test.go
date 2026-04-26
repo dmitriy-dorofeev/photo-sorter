@@ -1,6 +1,7 @@
 package sorter
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestBuildTree_Basic(t *testing.T) {
 		return date(2024, 3, 15), true
 	}
 
-	entries := s.BuildTree(files, nil, resolve)
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -43,7 +44,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 		return time.Time{}, false
 	}
 
-	entries := s.BuildTree(files, nil, resolve)
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
 	want := filepath.Join("/target", "unsorted", "unknown.bin")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -63,12 +64,12 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 
 	dups := []deduper.Result{
 		{
-			Original: files[0],
+			Original:   files[0],
 			Duplicates: []scanner.FileInfo{files[1]},
 		},
 	}
 
-	entries := s.BuildTree(files, dups, resolve)
+	entries := s.BuildTree(context.Background(), files, dups, resolve)
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -91,7 +92,7 @@ func TestBuildTree_NameCollision(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(files, nil, resolve)
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -117,7 +118,7 @@ func TestBuildTree_LivePhotos(t *testing.T) {
 		return time.Time{}, false // .MOV без даты
 	}
 
-	entries := s.BuildTree(files, nil, resolve)
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -144,7 +145,7 @@ func TestBuildTree_LivePhotosDisabled(t *testing.T) {
 		return time.Time{}, false // .MOV без даты
 	}
 
-	entries := s.BuildTree(files, nil, resolve)
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}

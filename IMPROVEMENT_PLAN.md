@@ -8,29 +8,21 @@
 
 ## Содержание
 
-1. [Критические баги и риск потери данных](#1-критические-баги-и-риск-потери-данных)
-2. [Безопасность](#2-безопасность)
-3. [Race conditions и конкурентность](#3-race-conditions-и-конкурентность)
-4. [Производительность](#4-производительность)
-5. [Архитектура и связанность](#5-архитектура-и-связанность)
-6. [Обработка ошибок и надёжность](#6-обработка-ошибок-и-надёжность)
-7. [TUI и пользовательский опыт](#7-tui-и-пользовательский-опыт)
-8. [CLI и парсинг флагов](#8-cli-и-парсинг-флагов)
-9. [Тестирование](#9-тестирование)
-10. [Качество кода и мелочи](#10-качество-кода-и-мелочи)
+1. [Безопасность](#1-безопасность)
+2. [Производительность](#2-производительность)
+3. [Архитектура и связанность](#3-архитектура-и-связанность)
+4. [Обработка ошибок и надёжность](#4-обработка-ошибок-и-надёжность)
+5. [TUI и пользовательский опыт](#5-tui-и-пользовательский-опыт)
+6. [CLI и парсинг флагов](#6-cli-и-парсинг-флагов)
+7. [Тестирование](#7-тестирование)
+8. [Качество кода и мелочи](#8-качество-кода-и-мелочи)
 
 
 ---
 
-## 1. Критические баги и риск потери данных
+## 1. Безопасность
 
-Все P0 блокеры устранены.
-
----
-
-## 2. Безопасность
-
-### 2.1 Path Traversal в `copier`
+### 1.1 Path Traversal в `copier`
 
 **Проблема:** `e.Target` формируется из пользовательского шаблона и имён файлов. Если злоумышленник положит файл с именем `../../../etc/cron.d/evil`, `os.MkdirAll` и `os.Create` создадут файлы за пределами `targetRoot`.
 
@@ -48,13 +40,13 @@ func validateTargetPath(targetRoot, target string) error {
 }
 ```
 
-### 2.2 Symlink attack в `copier`
+### 1.2 Symlink attack в `copier`
 
 **Проблема:** если в `target` уже есть symlink `2024/03/15/photo.jpg -> /etc/passwd`, `os.Create(dst)` перезапишет `/etc/passwd`.
 
 **Как исправить:** перед `os.Create` проверять `os.Lstat(target)`. Если `ModeSymlink` — удалять symlink (или возвращать ошибку). Либо открывать с `O_EXCL`.
 
-### 2.3 `internal/deduper/hasher.go` — Чтение named pipe/FIFO повиснет
+### 1.3 `internal/deduper/hasher.go` — Чтение named pipe/FIFO повиснет
 
 **Проблема:** `HashFile` открывает любой файл по пути без проверки `ModeType`. Если `path` — named pipe или device, `os.Open` повиснет.
 
@@ -63,81 +55,9 @@ func validateTargetPath(targetRoot, target string) error {
 
 ---
 
-## 3. Race conditions и конкурентность
+## 2. Производительность
 
-### 3.1 `internal/scanner/scanner.go:49` — `errgroup` без контекста
-
-**Проблема:** `g := new(errgroup.Group)` вместо `errgroup.WithContext(ctx)`. Если один `WalkDir` упадёт с ошибкой, остальные горутины продолжат бесцельно обход, тратя CPU и I/O.
-
-**Как исправить:**
-```go
-g, ctx := errgroup.WithContext(ctx)
-```
-И внутри `WalkDir` проверять `ctx.Err()`.
-
-### 3.2 `internal/scanner/scanner.go:72-80` — Глобальный мьютекс на каждый файл
-
-**Проблема:** `mu.Lock()` / `mu.Unlock()` на каждый файл создаёт contention. При большом количестве файлов (>10K) это замедляет сканирование.
-
-**Как исправить:** собирать результаты в локальный слайс внутри каждой `g.Go`, merge в конце без мьютекса:
-```go
-g.Go(func() error {
-    var local []FileInfo
-    // ... append(local, ...)
-    mu.Lock()
-    files = append(files, local...)
-    mu.Unlock()
-    return nil
-})
-```
-
-### 3.3 `tui/copy.go:51-76` — Утечка goroutine при повторном запуске
-
-**Проблема:** `startCopy` перезаписывает `m.copyCancel`. Старая goroutine `copier.Copy` продолжит работу, но отменить её уже нельзя.
-
-**Как исправить:**
-- Добавить `sync.WaitGroup` или канал завершения.
-- Перед запуском новой копии вызывать старый `cancel()` и дожидаться завершения (через `select` с таймаутом).
-- Или блокировать повторный запуск, пока текущий не завершился.
-
-### 3.4 `tui/scan.go:232-234` + `settings.go` — `runner.Run` без отменяемого контекста
-
-**Проблема:** `runner.Run(context.Background(), cfg, nil)` — нет `context.WithCancel`. Если пользователь нажмёт `Esc` или `<-` во время сканирования, goroutine останется висячей (orphan goroutine).
-
-**Как исправить:**
-- Передавать `ctx` в `runner.Run` и далее в `scanner.Scan`, `deduper.FindDuplicates`.
-- При нажатии `Esc` / `<-` вызывать `cancel()`.
-
-### 3.5 `internal/logger/logger.go:30-32` — Race condition при записи в лог
-
-**Проблема:** если `Log` вызывается из нескольких goroutines, строки могут перемешаться в файле, так как `fmt.Fprintf` не гарантирует атомарность записи.
-
-**Как исправить:** добавить `sync.Mutex` в `Logger`:
-```go
-type Logger struct {
-    file *os.File
-    mu   sync.Mutex
-}
-
-func (l *Logger) Log(msg string) {
-    l.mu.Lock()
-    defer l.mu.Unlock()
-    // ...
-}
-```
-
-### 3.6 `tui/copy.go:101-106` — Нет визуальной обратной связи при отмене
-
-**Проблема:** при нажатии `Esc` вызывается `m.copyCancel()`, но `m.copy.running` остаётся `true`. Пользователь продолжает видеть "Обработано X из Y…" и "esc — отмена".
-
-**Как исправить:** сразу устанавливать `m.copy.running = false` и `m.copy.errMsg = "Отменено пользователем"`.
-
-
----
-
-## 4. Производительность
-
-### 4.1 `internal/dateresolver/filename.go` — `regexp.MustCompile` для каждого файла
+### 2.1 `internal/dateresolver/filename.go` — `regexp.MustCompile` для каждого файла
 
 **Проблема:** компиляция regex на лету для каждого файла. Это дорогая операция.
 
@@ -146,7 +66,7 @@ func (l *Logger) Log(msg string) {
 var imgWARe = regexp.MustCompile(`^IMG-(\d{8})-WA\d+$`)
 ```
 
-### 4.2 `internal/dateresolver/video.go:22` — `exiftool` запускается для каждого видео
+### 2.2 `internal/dateresolver/video.go:22` — `exiftool` запускается для каждого видео
 
 **Проблема:** при 1000 видео — 1000 fork/exec. Катастрофа для производительности. `exiftool` умеет принимать сразу список файлов.
 
@@ -155,25 +75,25 @@ var imgWARe = regexp.MustCompile(`^IMG-(\d{8})-WA\d+$`)
 - Или добавить `ResolveBatch(files []FileInfo) map[string]time.Time` в `dateresolver`.
 - Альтернатива: использовать `exiftool -stay_open` (но это усложняет код).
 
-### 4.3 `internal/deduper/hasher.go:21-22` — Лишний `bufio.NewReader`
+### 2.3 `internal/deduper/hasher.go:21-22` — Лишний `bufio.NewReader`
 
 **Проблема:** `bufio.NewReader(f)` создаёт 4KB-буфер поверх уже существующего 64KB-буфера (`make([]byte, 64*1024)`). Лишняя аллокация.
 
 **Как исправить:** читать напрямую через `f.Read(buf)` без `bufio`.
 
-### 4.4 `tui/preview.go:99-113` — Вычисление `previewDirs` на каждый кадр
+### 2.4 `tui/preview.go:99-113` — Вычисление `previewDirs` на каждый кадр
 
 **Проблема:** `previewDirs` создаёт `map` и сортирует слайс при каждом вызове `View()` (60 раз в секунду).
 
 **Как исправить:** кэшировать результат в `previewModel` и пересчитывать только при изменении `m.entries`.
 
-### 4.5 `tui/preview.go:115-123` — Квадратичная сложность `dirFileCount`
+### 2.5 `tui/preview.go:115-123` — Квадратичная сложность `dirFileCount`
 
 **Проблема:** функция вызывается для каждой показываемой директории (до 15 штук), и каждый вызов — линейный проход по `m.entries`.
 
 **Как исправить:** построить `map[string]int` один раз при изменении `entries`.
 
-### 4.6 `internal/copier/copier.go:218` — `Sync()` на каждый файл
+### 2.6 `internal/copier/copier.go:218` — `Sync()` на каждый файл
 
 **Проблема:** `destFile.Sync()` на каждый файл — перформанс-киллер при копировании на HDD. Время копирования 1000+ файлов увеличивается на порядок.
 
@@ -182,7 +102,7 @@ var imgWARe = regexp.MustCompile(`^IMG-(\d{8})-WA\d+$`)
 - Добавить один `Sync()` в конце всей операции (или вообще довериться ОС).
 - Либо сделать `Sync()` опциональным через флаг `--fsync` для параноиков.
 
-### 4.7 `internal/scanner/scanner.go:48` — `nil` слайс без capacity
+### 2.7 `internal/scanner/scanner.go:48` — `nil` слайс без capacity
 
 **Проблема:** `var files []FileInfo` инициализирован с `nil`. При большом количестве файлов множество реаллокаций.
 
@@ -193,29 +113,21 @@ files := make([]FileInfo, 0, 1024) // или оценка через WalkDir
 
 ---
 
-## 5. Архитектура и связанность
+## 3. Архитектура и связанность
 
-### 5.1 `internal/runner/runner.go:35` — `context.Context` не прокидывается вниз
-
-**Проблема:** `Run` принимает `ctx`, но **не передаёт** его в `scanner.Scan()`, `deduper.FindDuplicates()` или `sorter.BuildTree()`. Невозможно отменить долгие операции.
-
-**Как исправить:**
-- Добавить `ctx context.Context` в сигнатуры `Scan()`, `FindDuplicates()`, `BuildTree()`.
-- Проверять `ctx.Err()` в циклах и `WalkDir`.
-
-### 5.2 `internal/copier/copier.go:93` — `copier` зависит от `deduper.HashFile`
+### 3.1 `internal/copier/copier.go:93` — `copier` зависит от `deduper.HashFile`
 
 **Проблема:** хеширование — отдельная ответственность. `copier` не должен зависеть от `deduper`.
 
 **Как исправить:** вынести `HashFile` в отдельный пакет `internal/hasher`. Оба пакета (`deduper` и `copier`) будут зависеть от `hasher`.
 
-### 5.3 Дублирование логики `dirBrowser` — `tui/sources.go` ↔ `tui/target.go`
+### 3.2 Дублирование логики `dirBrowser` — `tui/sources.go` ↔ `tui/target.go`
 
 **Проблема:** два файла практически идентичны (навигация по папкам, `os.ReadDir`, рендеринг списка).
 
 **Как исправить:** выделить обобщённый компонент `dirBrowserModel` с параметрами (title, allowCreateDir и т.д.).
 
-### 5.4 Дублирование подсчёта статистики
+### 3.3 Дублирование подсчёта статистики
 
 **Проблема:** идентичная логика подсчёта `unsorted` / `withDate` / `duplicates` дублируется в:
 - `cmd/main.go:204-213`
@@ -224,7 +136,7 @@ files := make([]FileInfo, 0, 1024) // или оценка через WalkDir
 
 **Как исправить:** добавить метод `Result.Stats()` в пакет `runner` или `sorter`.
 
-### 5.5 `strings.Contains(e.Target, "unsorted")` — хрупкая эвристика
+### 3.4 `strings.Contains(e.Target, "unsorted")` — хрупкая эвристика
 
 **Проблема:** если целевая папка называется `/home/user/unsorted_backup/`, ВСЕ файлы в ней будут засчитаны как unsorted.
 
@@ -232,13 +144,13 @@ files := make([]FileInfo, 0, 1024) // или оценка через WalkDir
 - Вынести `"unsorted"` в именованную константу `const UnsortedDir = "unsorted"`.
 - Проверять `filepath.Base(filepath.Dir(e.Target)) == UnsortedDir` или добавить в `sorter.Entry` булево поле `IsUnsorted bool`.
 
-### 5.6 `internal/runner/runner.go:22` — `DryRun` — мёртвое поле
+### 3.5 `internal/runner/runner.go:22` — `DryRun` — мёртвое поле
 
 **Проблема:** `DryRun` присутствует в `Config`, но `runner` его нигде не использует. Путает пользователей API.
 
 **Как исправить:** либо использовать `DryRun` в `runner` (например, не создавать директории в `sorter.BuildTree`), либо убрать из `Config` и оставить только в CLI/TUI.
 
-### 5.7 `internal/dateresolver/dateresolver.go:36, 63` — Двойное `strings.ToLower`
+### 3.6 `internal/dateresolver/dateresolver.go:36, 63` — Двойное `strings.ToLower`
 
 **Проблема:** `scanner` уже приводит `Ext` к lowercase. `isJPEG` и `isVideo` делают это снова.
 
@@ -247,71 +159,15 @@ files := make([]FileInfo, 0, 1024) // или оценка через WalkDir
 
 ---
 
-## 6. Обработка ошибок и надёжность
+## 4. Обработка ошибок и надёжность
 
-### 6.1 `internal/scanner/scanner.go:54-57` — `WalkDir` останавливается при ошибке доступа
-
-**Проблема:** если в `source` есть системная директория без прав, `WalkDir` возвращает ошибку и пользователь не получит **ни одного** файла из этого source.
-
-**Как исправить:**
-```go
-if err != nil {
-    if d != nil && d.IsDir() {
-        return filepath.SkipDir // пропустить директорию
-    }
-    return nil // пропустить файл
-}
-```
-
-### 6.2 `internal/copier/copier.go:150-168` — Неточный подсчёт свободного места
-
-**Проблема:** `checkDiskSpace` считает размер ВСЕХ файлов, даже если целевые файлы уже существуют и будут пропущены. Это приводит к ложному "not enough disk space".
-
-**Как исправить:** при подсчёте `needed` исключать файлы, которые точно будут skipped (дубликаты), и учитывать уже существующие файлы с совпадающим хешем.
-
-### 6.3 `internal/copier/copier.go:170-186` — Хрупкое приведение типов `unix.Statfs_t`
-
-**Проблема:** `stat.Bavail * uint64(stat.Bsize)` зависит от платформы. На macOS/Darwin поля `Statfs_t` имеют типы `uint32`/`int32`.
-
-**Как исправить:**
-```go
-return uint64(stat.Bavail) * uint64(stat.Bsize), nil
-```
-
-### 6.4 `internal/logger/logger.go:25-27` — Нет `Sync()` перед `Close`
-
-**Проблема:** логи могут потеряться из внутреннего буфера ОС.
-
-**Как исправить:**
-```go
-func (l *Logger) Close() error {
-    _ = l.file.Sync()
-    return l.file.Close()
-}
-```
-
-### 6.5 `internal/logger/logger.go:32` — Игнорирование ошибки записи
-
-**Проблема:** `fmt.Fprintf` возвращает `(int, error)`. Если диск заполнился, пользователь не узнает.
-
-**Как исправить:**
-```go
-func (l *Logger) Log(msg string) error {
-    l.mu.Lock()
-    defer l.mu.Unlock()
-    timestamp := time.Now().Format(time.RFC3339)
-    _, err := fmt.Fprintf(l.file, "[%s] %s\n", timestamp, msg)
-    return err
-}
-```
-
-### 6.6 `tui/copy.go:122-126` — Бесшумная потеря лога
+### 4.1 `tui/copy.go:122-126` — Бесшумная потеря лога
 
 **Проблема:** если `logger.New` вернёт ошибку (нет прав на запись), функция просто `return`. Пользователь не узнает, что лог не создан.
 
 **Как исправить:** сохранять ошибку и показывать в UI как warning.
 
-### 6.7 `cmd/main.go:298` — Игнорирование ошибки `enc.Encode`
+### 4.2 `cmd/main.go:298` — Игнорирование ошибки `enc.Encode`
 
 **Проблема:** `_ = enc.Encode(report)`. Если `stdout` закрыт (pipe broken), программа вернёт код 0.
 
@@ -323,7 +179,7 @@ if err := enc.Encode(report); err != nil {
 }
 ```
 
-### 6.8 `tui/sources.go:59-62` — `os.ReadDir` ошибка игнорируется
+### 4.3 `tui/sources.go:59-62` — `os.ReadDir` ошибка игнорируется
 
 **Проблема:** если директория недоступна (permission denied), пользователь видит пустой список без объяснения.
 
@@ -331,9 +187,9 @@ if err := enc.Encode(report); err != nil {
 
 ---
 
-## 7. TUI и пользовательский опыт
+## 5. TUI и пользовательский опыт
 
-### 7.1 `tui/tui.go:12-18` — Нет восстановления терминала при panic
+### 5.1 `tui/tui.go:12-18` — Нет восстановления терминала при panic
 
 **Проблема:** если внутри `p.Run()` произойдёт `panic`, альтернативный экран терминала не восстановится. Пользователь останется с "чёрным экраном".
 
@@ -347,7 +203,7 @@ defer func() {
 }()
 ```
 
-### 7.2 `tui/scan.go:110-118` — Фейковый прогресс
+### 5.2 `tui/scan.go:110-118` — Фейковый прогресс
 
 **Проблема:** прогресс увеличивается на 3% каждые 200 мс, не связан с реальным состоянием `runner.Run`. Зависает на 95%, создавая впечатление зависания.
 
@@ -355,13 +211,13 @@ defer func() {
 - Передавать реальный прогресс через канал/atomic из `runner.Run`.
 - Или убрать числовой прогресс и показывать только текущий этап (scan → dedup → sort).
 
-### 7.3 `tui/model.go:30` — Только один Source в TUI
+### 5.3 `tui/model.go:30` — Только один Source в TUI
 
 **Проблема:** CLI поддерживает `--source` несколько раз, TUI — только одну папку. Функциональный дрейф.
 
 **Как исправить:** добавить в TUI возможность выбора нескольких исходных папок (multiselect в `sources.go`).
 
-### 7.4 `tui/settings.go:116` + `cmd/main.go:80` — Несогласованные дефолты
+### 5.4 `tui/settings.go:116` + `cmd/main.go:80` — Несогласованные дефолты
 
 | Параметр | CLI | TUI |
 |----------|-----|-----|
@@ -370,13 +226,13 @@ defer func() {
 
 **Как исправить:** вынести дефолты в пакет `internal/config` и использовать из одного места.
 
-### 7.5 `tui/settings.go:102` — Вводящий в заблуждение help
+### 5.5 `tui/settings.go:102` — Вводящий в заблуждение help
 
 **Проблема:** `"Копировать .mov рядом с .heic"`. Флаг влияет только на **дедупликацию**, а не на расположение. `.mov` всегда копируется в ту же дату.
 
 **Как исправить:** `"Не считать .heic + .mov дубликатами (Live Photos)"`.
 
-### 7.6 `tui/preview.go:59-61` — Некорректная замена `rel` на `/`
+### 5.6 `tui/preview.go:59-61` — Некорректная замена `rel` на `/`
 
 **Проблема:** `if rel == "." { rel = "/" }` — `filepath.Rel` возвращает относительный путь; замена на `"/"` бессмысленна на Windows и семантически неверна.
 
@@ -385,9 +241,9 @@ defer func() {
 
 ---
 
-## 8. CLI и парсинг флагов
+## 6. CLI и парсинг флагов
 
-### 8.1 `cmd/main.go:149` — Баг валидации шаблона даты
+### 6.1 `cmd/main.go:149` — Баг валидации шаблона даты
 
 **Проблема:** `time.Now().Format(template) == template` — если сегодня Monday и шаблон `"Mon"`, `Format` вернёт `"Mon"` → шаблон будет **отклонён** как некорректный. Наоборот, любой шаблон, не совпадающий с текущей датой (например `"2006"`), пройдёт.
 
@@ -400,7 +256,7 @@ func isValidTimeLayout(layout string) bool {
 ```
 Но лучше вообще не валидировать — `time.Time.Format` не паникует, а возвращает строку с `!` для невалидных layout'ов. Просто проверить на пустую строку.
 
-### 8.2 `cmd/main.go:159-164` — `os.Stat` не проверяет, что это директория
+### 6.2 `cmd/main.go:159-164` — `os.Stat` не проверяет, что это директория
 
 **Проблема:** пользователь может передать путь к файлу через `--source`. `os.Stat` пройдёт, но `scanner.Scan` отработает некорректно.
 
@@ -413,13 +269,13 @@ if err != nil || !info.IsDir() {
 }
 ```
 
-### 8.3 `cmd/main.go:143` — Нет проверки `target` на доступность для записи
+### 6.3 `cmd/main.go:143` — Нет проверки `target` на доступность для записи
 
 **Проблема:** `--target` может указывать на несуществующую директорию или директорию без прав записи. Ошибка всплывёт только на этапе копирования.
 
 **Как исправить:** проверять `os.MkdirAll(target, 0755)` и `os.CreateTemp(target, ".write-test-*")` на старте.
 
-### 8.4 `cmd/main.go:186-189` — Потеря частичной статистики при ошибке
+### 6.4 `cmd/main.go:186-189` — Потеря частичной статистики при ошибке
 
 **Проблема:** если `c.Copy` вернёт ошибку, `stats` уже содержит информацию о частично скопированных файлах, но программа выходит с `os.Exit(1)`, не показывая эти данные.
 
@@ -427,15 +283,15 @@ if err != nil || !info.IsDir() {
 
 ---
 
-## 9. Тестирование
+## 7. Тестирование
 
-### 9.1 Пакет `logger` — полностью без тестов
+### 7.1 Пакет `logger` — полностью без тестов
 
 **Проблема:** нет ни одного `*_test.go`.
 
 **Как исправить:** добавить тесты на `Log`, `Close`, race condition, обработку ошибок записи.
 
-### 9.2 `internal/scanner` — Нет тестов на edge cases
+### 7.2 `internal/scanner` — Нет тестов на edge cases
 
 **Проблема:** нет тестов на:
 - несуществующий `source`
@@ -447,19 +303,19 @@ if err != nil || !info.IsDir() {
 
 **Как исправить:** добавить табличные тесты с временными директориями.
 
-### 9.3 `internal/deduper` — Нет тестов на ошибки хеширования
+### 7.3 `internal/deduper` — Нет тестов на ошибки хеширования
 
 **Проблема:** нет теста на `HashFile` с `permission denied`, удалённым файлом, named pipe.
 
 **Как исправить:** использовать `os.Chmod` / `os.Remove` в тестах для симуляции ошибок.
 
-### 9.4 `internal/dateresolver` — Нет тестов на command injection и concurrent вызовы
+### 7.4 `internal/dateresolver` — Нет тестов на command injection и concurrent вызовы
 
 **Проблема:** нет теста на имя файла с `-`, нет теста на таймаут `exiftool`.
 
 **Как исправить:** создать файл с именем `-test.txt` и проверить, что `extractVideoDate` не падает.
 
-### 9.5 `internal/copier` — Нет тестов на critical paths
+### 7.5 `internal/copier` — Нет тестов на critical paths
 
 **Проблема:** нет тестов на:
 - symlink attack
@@ -472,19 +328,19 @@ if err != nil || !info.IsDir() {
 - Вынести `availableSpace` в интерфейс для мокирования.
 - Добавить `TestCopy_ContextCancelDuringCopy` с медленным `io.Pipe`.
 
-### 9.6 `cmd/main_test.go` — Хрупкая проверка `dry-run`
+### 7.6 `cmd/main_test.go` — Хрупкая проверка `dry-run`
 
 **Проблема:** `filepath.Glob` не проверяет подпапки. Ошибка `Glob` игнорируется.
 
 **Как исправить:** использовать `os.ReadDir` рекурсивно или `filepath.WalkDir`.
 
-### 9.7 Отсутствуют benchmark и fuzz тесты
+### 7.7 Отсутствуют benchmark и fuzz тесты
 
 **Проблема:** нет `BenchmarkHashFile`, `BenchmarkFindDuplicates`, `FuzzResolveDate`.
 
 **Как исправить:** добавить базовые bench и fuzz тесты для критичных функций.
 
-### 9.8 `internal/integration_test.go` — Завязан на точное количество файлов
+### 7.8 `internal/integration_test.go` — Завязан на точное количество файлов
 
 **Проблема:** `TestRun_EndToEnd` проверяет ровно 12 файлов в `testdata/e2e/source/2023`. Добавление новой фикстуры сломает тест.
 
@@ -493,15 +349,9 @@ if err != nil || !info.IsDir() {
 
 ---
 
-## 10. Качество кода и мелочи
+## 8. Качество кода и мелочи
 
-### 10.1 `internal/deduper/deduper.go:83` — Недетерминированный выбор "оригинала"
-
-**Проблема:** `hashGroup[0]` выбирается из итерации `map[uint64][]fileHash`. Порядок итерации `map` случайный. В текущей логике это не критично, но при расширении (например, выбор оригинала по дате) станет проблемой.
-
-**Как исправить:** сортировать `hashGroup` по `Path` или `ModTime` перед выбором `original`.
-
-### 10.2 `internal/dateresolver/video.go:10-17` — Мёртвый код uppercase расширений
+### 8.1 `internal/dateresolver/video.go:10-17` — Мёртвый код uppercase расширений
 
 **Проблема:** `scanner` всегда отдаёт lowercase расширения. Проверка `.MOV`, `.MP4` и т.д. — никогда не сработает.
 
@@ -513,7 +363,7 @@ case ".mov", ".mp4", ".avi", ".mkv":
 }
 ```
 
-### 10.3 `internal/sorter/sorter.go:99` — Магическая строка `"unsorted"`
+### 8.2 `internal/sorter/sorter.go:99` — Магическая строка `"unsorted"`
 
 **Проблема:** захардкожено в 3+ местах. Если пользователь уже имеет папку с таким именем — конфликт.
 
@@ -522,19 +372,19 @@ case ".mov", ".mp4", ".avi", ".mkv":
 const UnsortedDir = "unsorted"
 ```
 
-### 10.4 `internal/copier/copier.go:188-198` — `findFreeName` без защиты от переполнения
+### 8.3 `internal/copier/copier.go:188-198` — `findFreeName` без защиты от переполнения
 
 **Проблема:** бесконечный цикл `for i := 1; ; i++`. Теоретически, если в директории 2^31 файлов с одинаковым префиксом, цикл не завершится.
 
 **Как исправить:** добавить `maxIterations := 10000` и возвращать ошибку при превышении.
 
-### 10.5 `internal/copier/copier.go:122-127` — `ErrorList` как `[]string`
+### 8.4 `internal/copier/copier.go:122-127` — `ErrorList` как `[]string`
 
 **Проблема:** теряется тип ошибки и возможность `errors.Is` / `errors.As`.
 
 **Как исправить:** сделать `ErrorList []error`, а для JSON/текста конвертировать через `err.Error()` при рендеринге.
 
-### 10.6 `tui/model.go:73-89` — Нет `default` в switch по `m.screen`
+### 8.5 `tui/model.go:73-89` — Нет `default` в switch по `m.screen`
 
 **Проблема:** если добавят новый экран и забудут case, UI "замрёт" — не будет ни реакции, ни ошибки.
 
@@ -544,7 +394,7 @@ default:
     panic(fmt.Sprintf("unknown screen: %d", m.screen))
 ```
 
-### 10.7 `internal/dateresolver/filename.go` — Magic numbers без имен
+### 8.6 `internal/dateresolver/filename.go` — Magic numbers без имен
 
 **Проблема:** парсеры дат используют индексы подстрок (`4:8`, `0:4` и т.д.) без именованных констант. Сложно читать и поддерживать.
 
@@ -558,13 +408,13 @@ const (
 )
 ```
 
-### 10.8 `cmd/main.go:204-213` / `260-269` — Дублирование логики подсчёта
+### 8.7 `cmd/main.go:204-213` / `260-269` — Дублирование логики подсчёта
 
 **Проблема:** идентичные циклы в `printTextReport` и `printJSONReport`.
 
 **Как исправить:** выделить функцию `computeReportStats(entries []sorter.Entry) (withDate, unsorted, dupCount int, unsortedFiles []string)`.
 
-### 10.9 `tui/settings.go:47` — `findPreset` завязан на порядок слайса
+### 8.8 `tui/settings.go:47` — `findPreset` завязан на порядок слайса
 
 **Проблема:** `return len(templatePresets) - 1, false` предполагает, что последний элемент — всегда `"Свой формат…"`. Добавление пресета в конец сломает логику.
 
@@ -574,28 +424,19 @@ const (
 
 ## Приоритетный план действий (рекомендация по порядку исправления)
 
-### P0 — Критично (блокер релиза)
-Все P0 блокеры устранены.
+### P1 — Средний (производительность и UX)
+1. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
+2. `video.go` — batch-вызов `exiftool` для всех видео.
+3. `hasher.go` — убрать лишний `bufio.NewReader`.
+4. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
+5. `scan.go` — реальный прогресс вместо фейкового.
+6. `main.go` — починить валидацию шаблона даты.
 
-### P1 — Высокий (безопасность и стабильность)
-1. `scanner.go` — `errgroup.WithContext`, graceful handling permission denied.
-2. `runner.go` — прокинуть `ctx` во все этапы pipeline.
-3. `logger.go` — `sync.Mutex` + `Sync()` + возврат ошибки.
-4. `copier.go` — точный подсчёт свободного места.
-
-### P2 — Средний (производительность и UX)
-5. `filename.go` — вынести `regexp.MustCompile` на уровень пакета.
-6. `video.go` — batch-вызов `exiftool` для всех видео.
-7. `hasher.go` — убрать лишний `bufio.NewReader`.
-8. `preview.go` — кэшировать `previewDirs` и `dirFileCount`.
-9. `scan.go` — реальный прогресс вместо фейкового.
-10. `main.go` — починить валидацию шаблона даты.
-
-### P3 — Низкий (рефакторинг и мелочи)
-11. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
-12. Вынести общие дефолты в `internal/config`.
-13. Добавить benchmark и fuzz тесты.
-14. Убрать магические строки/числа в константы.
+### P2 — Низкий (рефакторинг и мелочи)
+7. Дедупликация `sources.go` / `target.go` → `dirBrowserModel`.
+8. Вынести общие дефолты в `internal/config`.
+9. Добавить benchmark и fuzz тесты.
+10. Убрать магические строки/числа в константы.
 
 ---
 
