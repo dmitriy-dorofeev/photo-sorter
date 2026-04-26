@@ -134,7 +134,24 @@ func (c *Copier) Copy(
 	if progress != nil {
 		progress(total, total)
 	}
+
+	// Один sync в конце операции вместо sync на каждый файл.
+	if !c.dryRun && stats.Copied > 0 && c.targetRoot != "" {
+		_ = syncDir(c.targetRoot)
+	}
+
 	return stats, nil
+}
+
+// syncDir вызывает fsync на директории, гарантируя сброс
+// метаданных файловой системы на диск.
+func syncDir(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return f.Sync()
 }
 
 // recordError добавляет ошибку в ErrorList (максимум 10 записей).
@@ -270,9 +287,8 @@ func copyFile(src, dst string) error {
 		return err
 	}
 
-	if err := tmpFile.Sync(); err != nil {
-		return err
-	}
+	// Sync() убран отсюда по соображениям производительности.
+	// Один sync на targetRoot выполняется в конце Copy.
 	if err := tmpFile.Close(); err != nil {
 		return err
 	}
