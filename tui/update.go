@@ -29,11 +29,13 @@ func updateNotice(m Model) string {
 	res := *m.updateResult
 
 	if res.IsDirty {
-		return errorStyle.Render("⚠ Версия собрана из 'грязного' дерева — обновление невозможно")
+		return errorStyle.Render("⚠ Версия собрана из 'грязного' дерева — обновление невозможно") + "\n" +
+			helpStyle.Render("  Скачайте релиз вручную с GitHub")
 	}
 
 	if res.IsDev {
-		return subtitleStyle.Render("Версия dev — обновления недоступны")
+		return subtitleStyle.Render("Версия dev — обновления недоступны") + "\n" +
+			helpStyle.Render("  Скачайте релиз вручную с GitHub")
 	}
 
 	if res.Error != nil {
@@ -41,7 +43,8 @@ func updateNotice(m Model) string {
 	}
 
 	if res.HasUpdate {
-		return successStyle.Render(fmt.Sprintf("⬆ Доступно обновление: %s → %s", m.version, res.Latest))
+		return successStyle.Render(fmt.Sprintf("⬆ Доступно обновление: %s → %s", m.version, res.Latest)) + "\n" +
+			helpStyle.Render("  Выполните 'photo-sorter update' для установки")
 	}
 
 	return ""
