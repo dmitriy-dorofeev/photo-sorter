@@ -9,8 +9,8 @@ import (
 )
 
 // Run запускает TUI-приложение.
-func Run() {
-	p := tea.NewProgram(NewModel(), tea.WithAltScreen())
+func Run(version string) {
+	p := tea.NewProgram(NewModel(version), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Ошибка запуска TUI: %v\n", err)
 		os.Exit(1)

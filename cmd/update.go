@@ -13,41 +13,38 @@ import (
 	"strings"
 	"time"
 
+	"photo-sorter/internal/updater"
+
 	"golang.org/x/mod/semver"
 )
 
-const (
-	githubOwner = "dmitriy-dorofeev"
-	githubRepo  = "photo-sorter"
-)
-
-// ghRelease описывает ответ GitHub API для latest release.
-type ghRelease struct {
-	TagName string `json:"tag_name"`
-	Assets  []struct {
-		Name string `json:"name"`
-		URL  string `json:"browser_download_url"`
-	} `json:"assets"`
-}
-
 // runUpdate выполняет self-update до последней версии с GitHub Releases.
 func runUpdate() {
-	current := normalizeVersion(version)
+	res := updater.CheckVersion(version)
 
-	if current == "dev" || !semver.IsValid(current) {
+	if res.IsDirty {
+		fmt.Println("Текущая версия собрана из 'грязного' дерева (dirty).")
+		fmt.Println("Обновление невозможно: версия не соответствует релизу.")
+		fmt.Println("Соберите бинарник из чистого состояния или скачайте вручную:")
+		fmt.Printf("  https://github.com/%s/%s/releases/latest\n", updater.GithubOwner, updater.GithubRepo)
+		os.Exit(1)
+	}
+
+	current := updater.NormalizeVersion(version)
+
+	if res.IsDev || !semver.IsValid(current) {
 		fmt.Println("Текущая версия — dev (сборка из исходников).")
 		fmt.Println("Для обновления скачайте бинарник вручную:")
-		fmt.Printf("  https://github.com/%s/%s/releases/latest\n", githubOwner, githubRepo)
+		fmt.Printf("  https://github.com/%s/%s/releases/latest\n", updater.GithubOwner, updater.GithubRepo)
 		os.Exit(1)
 	}
 
-	latest, err := fetchLatestRelease()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Не удалось проверить обновления: %v\n", err)
+	if res.Error != nil {
+		fmt.Fprintf(os.Stderr, "Не удалось проверить обновления: %v\n", res.Error)
 		os.Exit(1)
 	}
 
-	normLatest := normalizeVersion(latest.TagName)
+	normLatest := updater.NormalizeVersion(res.Latest)
 
 	if semver.Compare(normLatest, current) <= 0 {
 		fmt.Printf("У вас установлена актуальная версия: %s\n", version)
@@ -62,6 +59,12 @@ func runUpdate() {
 		archName(runtime.GOARCH),
 	)
 
+	latest, err := fetchLatestReleaseRaw()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Не удалось получить информацию о релизе: %v\n", err)
+		os.Exit(1)
+	}
+
 	var downloadURL string
 	for _, a := range latest.Assets {
 		if a.Name == assetName {
@@ -72,7 +75,7 @@ func runUpdate() {
 
 	if downloadURL == "" {
 		fmt.Fprintf(os.Stderr, "Не найден бинарник для %s/%s (%s)\n", runtime.GOOS, runtime.GOARCH, assetName)
-		fmt.Fprintf(os.Stderr, "Скачайте вручную: https://github.com/%s/%s/releases/%s\n", githubOwner, githubRepo, latest.TagName)
+		fmt.Fprintf(os.Stderr, "Скачайте вручную: https://github.com/%s/%s/releases/%s\n", updater.GithubOwner, updater.GithubRepo, latest.TagName)
 		os.Exit(1)
 	}
 
@@ -106,33 +109,38 @@ func runUpdate() {
 
 // runCheckUpdate только сообщает, есть ли новая версия.
 func runCheckUpdate() {
-	current := normalizeVersion(version)
+	res := updater.CheckVersion(version)
 
-	if current == "dev" || !semver.IsValid(current) {
-		fmt.Println("Текущая версия — dev.")
-		fmt.Printf("Последняя стабильная версия: https://github.com/%s/%s/releases/latest\n", githubOwner, githubRepo)
-		return
-	}
-
-	latest, err := fetchLatestRelease()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Не удалось проверить обновления: %v\n", err)
+	if res.IsDirty {
+		fmt.Println("Текущая версия собрана из 'грязного' дерева (dirty).")
+		fmt.Println("Проверка обновлений невозможна: версия не соответствует релизу.")
+		fmt.Printf("Последняя стабильная версия: https://github.com/%s/%s/releases/latest\n", updater.GithubOwner, updater.GithubRepo)
 		os.Exit(1)
 	}
 
-	normLatest := normalizeVersion(latest.TagName)
+	if res.IsDev {
+		fmt.Println("Текущая версия — dev.")
+		fmt.Printf("Последняя стабильная версия: https://github.com/%s/%s/releases/latest\n", updater.GithubOwner, updater.GithubRepo)
+		return
+	}
 
-	if semver.Compare(normLatest, current) <= 0 {
+	if res.Error != nil {
+		fmt.Fprintf(os.Stderr, "Не удалось проверить обновления: %v\n", res.Error)
+		os.Exit(1)
+	}
+
+	if !res.HasUpdate {
 		fmt.Printf("У вас актуальная версия: %s\n", version)
 	} else {
-		fmt.Printf("Доступно обновление: %s → %s\n", version, strings.TrimPrefix(normLatest, "v"))
+		fmt.Printf("Доступно обновление: %s → %s\n", version, res.Latest)
 		fmt.Printf("Выполните \"photo-sorter update\" для установки.\n")
 	}
 }
 
-func fetchLatestRelease() (*ghRelease, error) {
+// fetchLatestReleaseRaw получает информацию о последнем релизе через GitHub API.
+func fetchLatestReleaseRaw() (*updater.Release, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", githubOwner, githubRepo)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updater.GithubOwner, updater.GithubRepo)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -149,7 +157,7 @@ func fetchLatestRelease() (*ghRelease, error) {
 		return nil, fmt.Errorf("GitHub API вернул %s", resp.Status)
 	}
 
-	var rel ghRelease
+	var rel updater.Release
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return nil, err
 	}
@@ -247,16 +255,6 @@ func replaceExecutable(newBin string) error {
 
 	_ = os.Remove(backupPath)
 	return nil
-}
-
-func normalizeVersion(v string) string {
-	if v == "dev" {
-		return v
-	}
-	if !strings.HasPrefix(v, "v") {
-		return "v" + v
-	}
-	return v
 }
 
 func title(s string) string {

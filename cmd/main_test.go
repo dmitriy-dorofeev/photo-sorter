@@ -44,6 +44,30 @@ func TestCLIUpdateDev(t *testing.T) {
 	}
 }
 
+func TestCLICheckUpdateDirty(t *testing.T) {
+	cmd := exec.Command("go", "run", "-ldflags", "-X main.version=1.0.0-dirty", ".", "--check-update")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error for dirty version check-update, got: %s", out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "dirty") {
+		t.Errorf("expected dirty version message, got: %s", output)
+	}
+}
+
+func TestCLIUpdateDirty(t *testing.T) {
+	cmd := exec.Command("go", "run", "-ldflags", "-X main.version=1.0.0-dirty", ".", "update")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error for dirty version update, got: %s", out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "dirty") {
+		t.Errorf("expected dirty version message, got: %s", output)
+	}
+}
+
 func TestCLIHelp(t *testing.T) {
 	cmd := exec.Command("go", "run", ".", "--help")
 	out, err := cmd.CombinedOutput()

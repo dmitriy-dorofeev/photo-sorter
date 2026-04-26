@@ -130,7 +130,7 @@ func main() {
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
 	if useTUI && len(sources) == 0 && target == "" {
-		tui.Run()
+		tui.Run(version)
 		return
 	}
 

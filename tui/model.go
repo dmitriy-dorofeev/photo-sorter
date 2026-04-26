@@ -7,6 +7,7 @@ import (
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/updater"
 )
 
 // Screen описывает текущий экран приложения.
@@ -43,12 +44,17 @@ type Model struct {
 
 	// Копирование
 	copyCancel context.CancelFunc
+
+	// Версия и обновление
+	version      string
+	updateResult *updater.CheckResult
 }
 
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
-func NewModel() Model {
+func NewModel(version string) Model {
 	return Model{
 		screen:   ScreenSources,
+		version:  version,
 		sources:  newSourcesModel(),
 		target:   newTargetModel(),
 		settings: newSettingsModel(),
@@ -58,7 +64,10 @@ func NewModel() Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return m.sources.Init()
+	return tea.Batch(
+		m.sources.Init(),
+		checkUpdateCmd(m.version),
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

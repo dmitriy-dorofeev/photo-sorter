@@ -85,6 +85,10 @@ func loadDirItems(dir string) []dirItem {
 
 func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case updateCheckMsg:
+		m.updateResult = &msg.result
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.sources.width = msg.Width
 		m.sources.height = msg.Height
@@ -160,7 +164,12 @@ func (m Model) viewSources() string {
 	b.WriteString(titleStyle.Render(" photo-sorter "))
 	b.WriteString("\n\n")
 	b.WriteString(subtitleStyle.Render("Шаг 1. Выбор источника"))
-	b.WriteString("\n\n")
+	b.WriteString("\n")
+	if notice := updateNotice(m); notice != "" {
+		b.WriteString(notice)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 
 	// ── Блок выбора ──
 	b.WriteString(highlightStyle.Render("Текущая папка: "))
