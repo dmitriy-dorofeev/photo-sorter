@@ -165,7 +165,8 @@ func fetchLatestReleaseRaw() (*updater.Release, error) {
 }
 
 func downloadFile(url, path string) error {
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -211,7 +212,7 @@ func extractBinary(archivePath, destDir, binName string) (string, error) {
 
 		if filepath.Base(hdr.Name) == binName {
 			outPath := filepath.Join(destDir, binName)
-			out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode|0111))
+			out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)|0o111)
 			if err != nil {
 				return "", err
 			}
