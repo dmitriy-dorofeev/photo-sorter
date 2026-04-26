@@ -22,35 +22,11 @@
 
 ## 1. Безопасность
 
-### 1.1 Path Traversal в `copier`
+✅ **Все пункты выполнены.**
 
-**Проблема:** `e.Target` формируется из пользовательского шаблона и имён файлов. Если злоумышленник положит файл с именем `../../../etc/cron.d/evil`, `os.MkdirAll` и `os.Create` создадут файлы за пределами `targetRoot`.
-
-**Как исправить:**
-```go
-func validateTargetPath(targetRoot, target string) error {
-    rel, err := filepath.Rel(targetRoot, target)
-    if err != nil {
-        return err
-    }
-    if strings.HasPrefix(rel, "..") {
-        return fmt.Errorf("path traversal detected: %s", target)
-    }
-    return nil
-}
-```
-
-### 1.2 Symlink attack в `copier`
-
-**Проблема:** если в `target` уже есть symlink `2024/03/15/photo.jpg -> /etc/passwd`, `os.Create(dst)` перезапишет `/etc/passwd`.
-
-**Как исправить:** перед `os.Create` проверять `os.Lstat(target)`. Если `ModeSymlink` — удалять symlink (или возвращать ошибку). Либо открывать с `O_EXCL`.
-
-### 1.3 `internal/deduper/hasher.go` — Чтение named pipe/FIFO повиснет
-
-**Проблема:** `HashFile` открывает любой файл по пути без проверки `ModeType`. Если `path` — named pipe или device, `os.Open` повиснет.
-
-**Как исправить:** перед открытием проверять `info.Mode().IsRegular()`.
+- **1.1 Path Traversal** — добавлена `validateTargetPath`, проверяющая `filepath.Rel` перед `os.MkdirAll`.
+- **1.2 Symlink attack** — в `Copy` используется `os.Lstat` + удаление symlink перед копированием; `copyFile` использует атомарный `os.CreateTemp` + `os.Rename`.
+- **1.3 HashFile named pipe** — перед открытием проверяется `info.Mode().IsRegular()`.
 
 
 ---

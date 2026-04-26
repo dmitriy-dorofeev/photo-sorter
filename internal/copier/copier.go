@@ -78,6 +78,14 @@ func (c *Copier) Copy(
 			continue
 		}
 
+		if c.targetRoot != "" {
+			if err := validateTargetPath(c.targetRoot, e.Target); err != nil {
+				stats.Errors++
+				c.recordError(&stats, err)
+				continue
+			}
+		}
+
 		if err := os.MkdirAll(filepath.Dir(e.Target), 0755); err != nil {
 			stats.Errors++
 			c.recordError(&stats, err)
@@ -88,16 +96,26 @@ func (c *Copier) Copy(
 		}
 
 		target := e.Target
-		if _, err := os.Stat(target); err == nil {
+		if info, err := os.Lstat(target); err == nil {
 			// Целевой файл уже существует.
-			hSrc, err1 := deduper.HashFile(e.Source.Path)
-			hDst, err2 := deduper.HashFile(target)
-			if err1 == nil && err2 == nil && hSrc == hDst {
-				stats.Skipped++
-				consecutiveErrors = 0
-				continue
+			if info.Mode()&os.ModeSymlink != 0 {
+				// Symlink — удаляем перед копированием, чтобы не писать
+				// через него и не оставлять потенциальную уязвимость.
+				if err := os.Remove(target); err != nil {
+					stats.Errors++
+					c.recordError(&stats, err)
+					continue
+				}
+			} else {
+				hSrc, err1 := deduper.HashFile(e.Source.Path)
+				hDst, err2 := deduper.HashFile(target)
+				if err1 == nil && err2 == nil && hSrc == hDst {
+					stats.Skipped++
+					consecutiveErrors = 0
+					continue
+				}
+				target = findFreeName(target)
 			}
-			target = findFreeName(target)
 		}
 
 		if err := copyFile(e.Source.Path, target); err != nil {
@@ -188,6 +206,27 @@ func availableSpace(path string) (uint64, error) {
 	return uint64(stat.Bavail) * uint64(stat.Bsize), nil
 }
 
+// validateTargetPath проверяет, что target находится внутри targetRoot.
+// Защита от path traversal через имя файла (например, "../../../etc/passwd").
+func validateTargetPath(targetRoot, target string) error {
+	absRoot, err := filepath.Abs(targetRoot)
+	if err != nil {
+		return err
+	}
+	absTarget, err := filepath.Abs(target)
+	if err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(absRoot, absTarget)
+	if err != nil {
+		return err
+	}
+	if strings.HasPrefix(rel, "..") {
+		return fmt.Errorf("path traversal detected: %s", target)
+	}
+	return nil
+}
+
 func findFreeName(target string) string {
 	dir := filepath.Dir(target)
 	ext := filepath.Ext(target)
@@ -236,6 +275,14 @@ func copyFile(src, dst string) error {
 	}
 	if err := tmpFile.Close(); err != nil {
 		return err
+	}
+
+	// Если dst — symlink, удаляем его перед rename,
+	// чтобы гарантированно заменить symlink файлом, а не писать через него.
+	if info, err := os.Lstat(dst); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(dst); err != nil {
+			return err
+		}
 	}
 
 	if err := os.Rename(tmpPath, dst); err != nil {
