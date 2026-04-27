@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/sys/unix"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
+
+	"golang.org/x/sys/unix"
 )
 
 // Stats содержит результат операции копирования.
@@ -270,7 +271,7 @@ func availableSpace(path string) (uint64, error) {
 			return 0, err
 		}
 	}
-	return uint64(stat.Bavail) * uint64(stat.Bsize), nil
+	return stat.Bavail * uint64(stat.Bsize), nil
 }
 
 // validateTargetPath проверяет, что target находится внутри targetRoot.

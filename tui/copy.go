@@ -8,9 +8,10 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/logger"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type copyTickMsg struct {

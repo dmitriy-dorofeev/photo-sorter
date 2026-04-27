@@ -6,8 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/sorter"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m Model) updatePreview(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -107,7 +108,7 @@ func (m Model) viewPreview() string {
 
 // buildPreviewCache строит кэш директорий и счётчиков файлов.
 // Вызывается один раз при получении entries (в updateScan).
-func (m Model) buildPreviewCache() Model {
+func buildPreviewCache(m Model) Model {
 	if len(m.entries) == 0 {
 		m.previewDirCache = nil
 		m.previewCountCache = nil

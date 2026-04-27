@@ -3,8 +3,9 @@ package tui
 import (
 	"fmt"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/updater"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // updateCheckMsg передаёт результат асинхронной проверки обновления.

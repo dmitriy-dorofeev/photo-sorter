@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/sys/unix"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
+
+	"golang.org/x/sys/unix"
 )
 
 func testdata(name string) string {

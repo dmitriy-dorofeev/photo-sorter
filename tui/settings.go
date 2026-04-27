@@ -5,10 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"photo-sorter/internal/config"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"photo-sorter/internal/config"
 )
 
 // ---------------------------------------------------------------------------

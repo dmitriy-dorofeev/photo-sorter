@@ -161,64 +161,64 @@ func main() {
 // validateInputs проверяет корректность аргументов CLI.
 func validateInputs(cfg runner.Config, format string) error {
 	if len(cfg.Sources) == 0 {
-		return fmt.Errorf("Ошибка: укажите хотя бы одну исходную папку (--source)")
+		return fmt.Errorf("ошибка: укажите хотя бы одну исходную папку (--source)")
 	}
 	if cfg.Target == "" {
-		return fmt.Errorf("Ошибка: укажите целевую папку (--target)")
+		return fmt.Errorf("ошибка: укажите целевую папку (--target)")
 	}
 
 	// Проверка доступности target для записи
 	if err := os.MkdirAll(cfg.Target, 0750); err != nil {
-		return fmt.Errorf("Ошибка: не удалось создать целевую папку: %w", err)
+		return fmt.Errorf("ошибка: не удалось создать целевую папку: %w", err)
 	}
 	tmpFile, err := os.CreateTemp(cfg.Target, ".write-test-*")
 	if err != nil {
-		return fmt.Errorf("Ошибка: целевая папка недоступна для записи: %w", err)
+		return fmt.Errorf("ошибка: целевая папка недоступна для записи: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		return fmt.Errorf("Ошибка: целевая папка недоступна для записи: %w", err)
+		return fmt.Errorf("ошибка: целевая папка недоступна для записи: %w", err)
 	}
 	os.Remove(tmpFile.Name())
 
 	if cfg.Template == "" {
-		return fmt.Errorf("Ошибка: шаблон даты не может быть пустым (--template)")
+		return fmt.Errorf("ошибка: шаблон даты не может быть пустым (--template)")
 	}
 
 	if format != "text" && format != "json" {
-		return fmt.Errorf("Ошибка: формат должен быть 'text' или 'json'")
+		return fmt.Errorf("ошибка: формат должен быть 'text' или 'json'")
 	}
 
 	for _, src := range cfg.Sources {
 		info, err := os.Stat(src)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return fmt.Errorf("Ошибка: исходная папка не существует: %s", src)
+				return fmt.Errorf("ошибка: исходная папка не существует: %s", src)
 			}
-			return fmt.Errorf("Ошибка: исходная папка недоступна: %s", src)
+			return fmt.Errorf("ошибка: исходная папка недоступна: %s", src)
 		}
 		if !info.IsDir() {
-			return fmt.Errorf("Ошибка: %s не является директорией", src)
+			return fmt.Errorf("ошибка: %s не является директорией", src)
 		}
 	}
 
 	// Проверка на пересечение source и target (self-copy).
 	absTarget, err := filepath.Abs(cfg.Target)
 	if err != nil {
-		return fmt.Errorf("Ошибка: не удалось определить абсолютный путь target: %w", err)
+		return fmt.Errorf("ошибка: не удалось определить абсолютный путь target: %w", err)
 	}
 	for _, src := range cfg.Sources {
 		absSrc, err := filepath.Abs(src)
 		if err != nil {
-			return fmt.Errorf("Ошибка: не удалось определить абсолютный путь source: %w", err)
+			return fmt.Errorf("ошибка: не удалось определить абсолютный путь source: %w", err)
 		}
 		if absSrc == absTarget {
-			return fmt.Errorf("Ошибка: исходная папка и целевая папка не могут совпадать: %s", src)
+			return fmt.Errorf("ошибка: исходная папка и целевая папка не могут совпадать: %s", src)
 		}
 		if strings.HasPrefix(absTarget, absSrc+string(filepath.Separator)) {
-			return fmt.Errorf("Ошибка: целевая папка не может быть внутри исходной: %s", src)
+			return fmt.Errorf("ошибка: целевая папка не может быть внутри исходной: %s", src)
 		}
 		if strings.HasPrefix(absSrc, absTarget+string(filepath.Separator)) {
-			return fmt.Errorf("Ошибка: исходная папка не может быть внутри целевой: %s", src)
+			return fmt.Errorf("ошибка: исходная папка не может быть внутри целевой: %s", src)
 		}
 	}
 

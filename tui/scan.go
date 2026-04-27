@@ -191,7 +191,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.files = msg.files
 		m.duplicates = msg.duplicates
 		m.entries = msg.entries
-		m = m.buildPreviewCache()
+		m = buildPreviewCache(m)
 		return m, nil
 
 	case tea.KeyMsg:

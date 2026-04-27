@@ -4,11 +4,12 @@ import (
 	"context"
 	"sync/atomic"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
 	"photo-sorter/internal/updater"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Screen описывает текущий экран приложения.
