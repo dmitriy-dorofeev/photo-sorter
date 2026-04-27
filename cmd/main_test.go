@@ -2,15 +2,43 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
+var (
+	cliBin    string
+	dirtyBin  string
+	buildOnce sync.Once
+)
+
+func buildTestBinaries() {
+	buildOnce.Do(func() {
+		tmpDir, err := os.MkdirTemp("", "photo-sorter-test-*")
+		if err != nil {
+			panic(fmt.Sprintf("failed to create temp dir: %v", err))
+		}
+
+		cliBin = filepath.Join(tmpDir, "photo-sorter")
+		if out, err := exec.Command("go", "build", "-o", cliBin, ".").CombinedOutput(); err != nil {
+			panic(fmt.Sprintf("failed to build binary: %v\n%s", err, out))
+		}
+
+		dirtyBin = filepath.Join(tmpDir, "photo-sorter-dirty")
+		if out, err := exec.Command("go", "build", "-ldflags", "-X main.version=1.0.0-dirty", "-o", dirtyBin, ".").CombinedOutput(); err != nil {
+			panic(fmt.Sprintf("failed to build dirty binary: %v\n%s", err, out))
+		}
+	})
+}
+
 func TestCLIVersion(t *testing.T) {
-	cmd := exec.Command("go", "run", ".", "--version")
+	buildTestBinaries()
+	cmd := exec.Command(cliBin, "--version")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("--version failed: %v\n%s", err, out)
@@ -22,7 +50,8 @@ func TestCLIVersion(t *testing.T) {
 }
 
 func TestCLICheckUpdateDev(t *testing.T) {
-	cmd := exec.Command("go", "run", ".", "--check-update")
+	buildTestBinaries()
+	cmd := exec.Command(cliBin, "--check-update")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("--check-update failed: %v\n%s", err, out)
@@ -34,7 +63,8 @@ func TestCLICheckUpdateDev(t *testing.T) {
 }
 
 func TestCLIUpdateDev(t *testing.T) {
-	cmd := exec.Command("go", "run", ".", "update")
+	buildTestBinaries()
+	cmd := exec.Command(cliBin, "update")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error for dev version update, got: %s", out)
@@ -46,7 +76,8 @@ func TestCLIUpdateDev(t *testing.T) {
 }
 
 func TestCLICheckUpdateDirty(t *testing.T) {
-	cmd := exec.Command("go", "run", "-ldflags", "-X main.version=1.0.0-dirty", ".", "--check-update")
+	buildTestBinaries()
+	cmd := exec.Command(dirtyBin, "--check-update")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error for dirty version check-update, got: %s", out)
@@ -58,7 +89,8 @@ func TestCLICheckUpdateDirty(t *testing.T) {
 }
 
 func TestCLIUpdateDirty(t *testing.T) {
-	cmd := exec.Command("go", "run", "-ldflags", "-X main.version=1.0.0-dirty", ".", "update")
+	buildTestBinaries()
+	cmd := exec.Command(dirtyBin, "update")
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		t.Fatalf("expected error for dirty version update, got: %s", out)
@@ -70,7 +102,8 @@ func TestCLIUpdateDirty(t *testing.T) {
 }
 
 func TestCLIHelp(t *testing.T) {
-	cmd := exec.Command("go", "run", ".", "--help")
+	buildTestBinaries()
+	cmd := exec.Command(cliBin, "--help")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// flag --help returns exit code 0 in Go, but let's be safe
@@ -97,10 +130,11 @@ func TestCLIHelp(t *testing.T) {
 }
 
 func TestCLIDryRun(t *testing.T) {
+	buildTestBinaries()
 	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
-	cmd := exec.Command("go", "run", ".",
+	cmd := exec.Command(cliBin,
 		"--source", sourceDir,
 		"--target", targetDir,
 		"--dry-run",
@@ -133,10 +167,11 @@ func TestCLIDryRun(t *testing.T) {
 }
 
 func TestCLIJSON(t *testing.T) {
+	buildTestBinaries()
 	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
-	cmd := exec.Command("go", "run", ".",
+	cmd := exec.Command(cliBin,
 		"--source", sourceDir,
 		"--target", targetDir,
 		"--dry-run",
@@ -167,10 +202,11 @@ func TestCLIJSON(t *testing.T) {
 }
 
 func TestCLIMultiSource(t *testing.T) {
+	buildTestBinaries()
 	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
 	targetDir := t.TempDir()
 
-	cmd := exec.Command("go", "run", ".",
+	cmd := exec.Command(cliBin,
 		"--source", sourceDir,
 		"--source", sourceDir,
 		"--target", targetDir,
@@ -187,6 +223,7 @@ func TestCLIMultiSource(t *testing.T) {
 }
 
 func TestCLIValidation(t *testing.T) {
+	buildTestBinaries()
 	tests := []struct {
 		name   string
 		args   []string
@@ -216,8 +253,7 @@ func TestCLIValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			args := append([]string{"run", "."}, tt.args...)
-			cmd := exec.Command("go", args...)
+			cmd := exec.Command(cliBin, tt.args...)
 			out, err := cmd.CombinedOutput()
 			if err == nil {
 				t.Fatalf("expected error, got success:\n%s", out)

@@ -50,7 +50,7 @@ func CheckVersion(current string) CheckResult {
 		return res
 	}
 
-	latest, err := fetchLatestRelease()
+	latest, err := FetchLatestRelease("photo-sorter")
 	if err != nil {
 		res.Error = err
 		return res
@@ -62,7 +62,8 @@ func CheckVersion(current string) CheckResult {
 	return res
 }
 
-func fetchLatestRelease() (*Release, error) {
+// FetchLatestRelease получает информацию о последнем релизе через GitHub API.
+func FetchLatestRelease(userAgent string) (*Release, error) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", GithubOwner, GithubRepo)
 	req, err := http.NewRequest("GET", url, nil)
@@ -70,7 +71,11 @@ func fetchLatestRelease() (*Release, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "photo-sorter")
+	if userAgent != "" {
+		req.Header.Set("User-Agent", userAgent)
+	} else {
+		req.Header.Set("User-Agent", "photo-sorter")
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

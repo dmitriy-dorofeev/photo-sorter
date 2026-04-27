@@ -2,8 +2,11 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
+	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -59,17 +62,19 @@ func runUpdate() {
 		archName(runtime.GOARCH),
 	)
 
-	latest, err := fetchLatestReleaseRaw()
+	latest, err := updater.FetchLatestRelease("photo-sorter/" + version)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Не удалось получить информацию о релизе: %v\n", err)
 		os.Exit(1)
 	}
 
-	var downloadURL string
+	var downloadURL, checksumsURL string
 	for _, a := range latest.Assets {
 		if a.Name == assetName {
 			downloadURL = a.URL
-			break
+		}
+		if a.Name == "checksums.txt" {
+			checksumsURL = a.URL
 		}
 	}
 
@@ -91,6 +96,16 @@ func runUpdate() {
 	if err := downloadFile(downloadURL, archivePath); err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка скачивания: %v\n", err)
 		os.Exit(1)
+	}
+
+	if checksumsURL != "" {
+		if err := verifyChecksum(archivePath, checksumsURL, assetName); err != nil {
+			fmt.Fprintf(os.Stderr, "Ошибка проверки целостности: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Проверка целостности пройдена.")
+	} else {
+		fmt.Fprintln(os.Stderr, "Предупреждение: checksums.txt не найден в релизе, проверка целостности пропущена.")
 	}
 
 	binPath, err := extractBinary(archivePath, tmpDir, "photo-sorter")
@@ -137,32 +152,68 @@ func runCheckUpdate() {
 	}
 }
 
-// fetchLatestReleaseRaw получает информацию о последнем релизе через GitHub API.
-func fetchLatestReleaseRaw() (*updater.Release, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", updater.GithubOwner, updater.GithubRepo)
-	req, err := http.NewRequest("GET", url, nil)
+// verifyChecksum скачивает checksums.txt, парсит хеш для assetName и сверяет с SHA256 архива.
+func verifyChecksum(archivePath, checksumsURL, assetName string) error {
+	checksumsData, err := downloadBytes(checksumsURL)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("скачивание checksums.txt: %w", err)
 	}
-	req.Header.Set("Accept", "application/vnd.github.v3+json")
-	req.Header.Set("User-Agent", "photo-sorter/"+version)
 
-	resp, err := client.Do(req)
+	archiveHash, err := fileSHA256(archivePath)
+	if err != nil {
+		return fmt.Errorf("вычисление SHA256 архива: %w", err)
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(checksumsData))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		expectedHash := fields[0]
+		fileName := fields[1]
+		if fileName == assetName {
+			if !strings.EqualFold(expectedHash, archiveHash) {
+				return fmt.Errorf("SHA256 mismatch: ожидалось %s, получено %s", expectedHash, archiveHash)
+			}
+			return nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("чтение checksums.txt: %w", err)
+	}
+	return fmt.Errorf("файл %s не найден в checksums.txt", assetName)
+}
+
+func fileSHA256(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func downloadBytes(url string) ([]byte, error) {
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API вернул %s", resp.Status)
+		return nil, fmt.Errorf("HTTP %s", resp.Status)
 	}
-
-	var rel updater.Release
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return nil, err
-	}
-	return &rel, nil
+	return io.ReadAll(resp.Body)
 }
 
 func downloadFile(url, path string) error {
