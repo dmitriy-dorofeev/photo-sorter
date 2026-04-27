@@ -459,10 +459,11 @@ func TestCancellation(t *testing.T) {
 	// Cancel immediately
 	cancel()
 	stats, err := c.Copy(ctx, entries, nil)
+	copied := stats.Copied
 	if err == nil {
 		t.Fatal("expected cancellation error")
 	}
-	if stats.Copied > 0 {
-		t.Logf("cancelled after %d copies", stats.Copied)
+	if copied > 0 {
+		t.Logf("cancelled after %d copies", copied)
 	}
 }

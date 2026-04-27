@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -180,7 +181,8 @@ func TestCLIJSON(t *testing.T) {
 	out, err := cmd.Output()
 	if err != nil {
 		var stderr []byte
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			stderr = exitErr.Stderr
 		}
 		t.Fatalf("CLI failed: %v\nstderr: %s\nstdout: %s", err, stderr, out)
