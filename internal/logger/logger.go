@@ -2,6 +2,7 @@
 package logger
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -25,8 +26,9 @@ func New(path string) (*Logger, error) {
 
 // Close синхронизирует и закрывает файл лога.
 func (l *Logger) Close() error {
-	_ = l.file.Sync()
-	return l.file.Close()
+	syncErr := l.file.Sync()
+	closeErr := l.file.Close()
+	return errors.Join(syncErr, closeErr)
 }
 
 // Log записывает строку в лог.

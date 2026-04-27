@@ -206,7 +206,7 @@ func TestCopy_AbortOnMissingTarget(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when target is not a directory")
 	}
-	want := "target disk unavailable after 3 consecutive errors"
+	want := "too many consecutive target errors (3), aborting"
 	if err.Error() != want {
 		t.Fatalf("unexpected error: %v (want %s)", err, want)
 	}

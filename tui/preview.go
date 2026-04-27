@@ -46,13 +46,24 @@ func (m Model) viewPreview() string {
 	))
 	b.WriteString("\n")
 
+	// Вычисляем лимиты списков из высоты терминала.
+	maxDirs := 15
+	maxSmall := 5
+	if m.height > 0 {
+		available := m.height - 12
+		if available > 5 {
+			maxDirs = available
+			maxSmall = max(3, available/3)
+		}
+	}
+
 	// Дерево папок
 	dirs := m.previewDirs()
 	if len(dirs) > 0 {
 		b.WriteString(highlightStyle.Render("Целевая структура:") + "\n")
 		shown := 0
 		for _, d := range dirs {
-			if shown >= 15 {
+			if shown >= maxDirs {
 				b.WriteString(fmt.Sprintf("  … и ещё %d папок\n", len(dirs)-shown))
 				break
 			}
@@ -67,7 +78,7 @@ func (m Model) viewPreview() string {
 	if len(m.duplicates) > 0 {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("Дубликаты (%d групп):", len(m.duplicates))) + "\n")
 		for i, dup := range m.duplicates {
-			if i >= 5 {
+			if i >= maxSmall {
 				b.WriteString(fmt.Sprintf("  … и ещё %d групп\n", len(m.duplicates)-i))
 				break
 			}
@@ -81,7 +92,7 @@ func (m Model) viewPreview() string {
 	if len(unsorted) > 0 {
 		b.WriteString(errorStyle.Render(fmt.Sprintf("Без даты — unsorted/ (%d файлов):", len(unsorted))) + "\n")
 		for i, f := range unsorted {
-			if i >= 5 {
+			if i >= maxSmall {
 				b.WriteString(fmt.Sprintf("  … и ещё %d\n", len(unsorted)-i))
 				break
 			}

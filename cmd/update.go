@@ -146,6 +146,7 @@ func fetchLatestReleaseRaw() (*updater.Release, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "photo-sorter/"+version)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -245,7 +246,39 @@ func replaceExecutable(newBin string) error {
 		return fmt.Errorf("бэкап: %w", err)
 	}
 
-	if err := os.Rename(newBin, execPath); err != nil {
+	// Копируем новый бинарник во временный файл в той же директории,
+	// чтобы rename не упал с EXDEV при cross-device обновлении (например, /tmp на tmpfs).
+	execDir := filepath.Dir(execPath)
+	tmpFile, err := os.CreateTemp(execDir, filepath.Base(execPath)+".tmp.")
+	if err != nil {
+		_ = os.Rename(backupPath, execPath)
+		return fmt.Errorf("создание временного файла: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	src, err := os.Open(newBin)
+	if err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		_ = os.Rename(backupPath, execPath)
+		return fmt.Errorf("открытие нового бинарника: %w", err)
+	}
+	defer src.Close()
+
+	if _, err := io.Copy(tmpFile, src); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		_ = os.Rename(backupPath, execPath)
+		return fmt.Errorf("копирование: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		_ = os.Rename(backupPath, execPath)
+		return fmt.Errorf("закрытие временного файла: %w", err)
+	}
+
+	if err := os.Rename(tmpPath, execPath); err != nil {
+		_ = os.Remove(tmpPath)
 		_ = os.Rename(backupPath, execPath)
 		return fmt.Errorf("замена: %w", err)
 	}

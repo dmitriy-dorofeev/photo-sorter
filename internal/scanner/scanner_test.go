@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -130,6 +131,21 @@ func TestScan_PermissionDenied(t *testing.T) {
 	}
 	if files[0].Name != "a.jpg" {
 		t.Errorf("expected a.jpg, got %s", files[0].Name)
+	}
+
+	skipped := s.SkippedPaths()
+	if len(skipped) == 0 {
+		t.Error("expected skipped paths to contain locked files")
+	}
+	found := false
+	for _, p := range skipped {
+		if strings.Contains(p, "locked") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected skipped paths to contain locked dir, got %v", skipped)
 	}
 }
 

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +26,8 @@ const (
 // Model — главная модель bubbletea.
 type Model struct {
 	screen Screen
+	width  int
+	height int
 
 	// Данные, общие для всех экранов
 	Sources []string
@@ -85,6 +86,26 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case updateCheckMsg:
+		m.updateResult = &msg.result
+		return m, nil
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.sources.width = msg.Width
+		m.sources.height = msg.Height
+		m.target.width = msg.Width
+		m.target.height = msg.Height
+		m.settings.width = msg.Width
+		m.settings.height = msg.Height
+		m.scan.width = msg.Width
+		m.scan.height = msg.Height
+		m.copy.width = msg.Width
+		m.copy.height = msg.Height
+		return m, nil
+	}
+
 	switch m.screen {
 	case ScreenSources:
 		return m.updateSources(msg)
@@ -99,7 +120,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ScreenCopy:
 		return m.updateCopy(msg)
 	default:
-		panic(fmt.Sprintf("unknown screen: %d", m.screen))
+		m.screen = ScreenSources
+		return m, tea.Quit
 	}
 }
 
@@ -118,7 +140,7 @@ func (m Model) View() string {
 	case ScreenCopy:
 		return m.viewCopy()
 	default:
-		panic(fmt.Sprintf("unknown screen: %d", m.screen))
+		return errorStyle.Render("Неизвестный экран. Нажмите любую клавишу для выхода.")
 	}
 }
 

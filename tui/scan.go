@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/deduper"
@@ -16,8 +15,6 @@ import (
 // ---------------------------------------------------------------------------
 // Сообщения
 // ---------------------------------------------------------------------------
-
-type scanTickMsg time.Time
 
 type scanResultMsg struct {
 	files      []scanner.FileInfo
@@ -32,12 +29,6 @@ type runnerProgressMsg struct {
 	stage   string
 	current int
 	total   int
-}
-
-func scanTickCmd() tea.Cmd {
-	return tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-		return scanTickMsg(t)
-	})
 }
 
 // progressListenCmd читает прогресс из канала и возвращает его как сообщение.
@@ -74,9 +65,12 @@ var scanStageNames = []string{
 	"Определение дат съёмки...",
 	"Поиск дубликатов...",
 	"Построение дерева папок...",
+	"Готово",
 }
 
 type scanModel struct {
+	width      int
+	height     int
 	running    bool
 	stage      scanStage
 	progress   float64 // 0..100
@@ -181,13 +175,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "sort":
 			m.scan.progress += 60
 		}
-		return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh))
-
-	case scanTickMsg:
-		if m.scan.done || m.scan.errMsg != "" || !m.scan.running {
-			return m, nil
-		}
-		return m, scanTickCmd()
+		return m, progressListenCmd(m.scan.progressCh)
 
 	case scanResultMsg:
 		if m.scan.aborted || msg.generation != m.scanGeneration {
@@ -233,7 +221,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scan = newScanModel()
 				m.scan.running = true
 				m.scan.progressCh = make(chan runnerProgressMsg, 10)
-				return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh), m.startScan())
+				return m, tea.Batch(progressListenCmd(m.scan.progressCh), m.startScan())
 			}
 			if m.scan.done {
 				m.screen = ScreenPreview

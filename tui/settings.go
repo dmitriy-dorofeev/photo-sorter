@@ -71,15 +71,36 @@ const (
 )
 
 type setting struct {
-	label string
-	key   string
-	help  string
-	value interface{} // string или bool
-	stype settingType
+	label       string
+	key         string
+	help        string
+	stringValue string
+	boolValue   bool
+	stype       settingType
+}
+
+// AsString возвращает строковое значение настройки.
+// Если тип не settingTypeText, возвращает пустую строку.
+func (s setting) AsString() string {
+	if s.stype != settingTypeText {
+		return ""
+	}
+	return s.stringValue
+}
+
+// AsBool возвращает boolean-значение настройки.
+// Если тип не settingTypeBool, возвращает false.
+func (s setting) AsBool() bool {
+	if s.stype != settingTypeBool {
+		return false
+	}
+	return s.boolValue
 }
 
 // settingsModel — состояние экрана настроек.
 type settingsModel struct {
+	width          int
+	height         int
 	cursor         int
 	items          []setting
 	editing        bool // true → редактируем custom через textinput
@@ -97,32 +118,32 @@ func newSettingsModel() settingsModel {
 		cursor: 0,
 		items: []setting{
 			{
-				label: "Шаблон папок",
-				key:   "template",
-				help:  "Формат именования папок по дате",
-				value: config.DefaultTemplate,
-				stype: settingTypeText,
+				label:       "Шаблон папок",
+				key:         "template",
+				help:        "Формат именования папок по дате",
+				stringValue: config.DefaultTemplate,
+				stype:       settingTypeText,
 			},
 			{
-				label: "Группировать Live Photos",
-				key:   "live_photos",
-				help:  "Не считать .heic + .mov дубликатами (Live Photos)",
-				value: config.DefaultLivePhotos,
-				stype: settingTypeBool,
+				label:     "Группировать Live Photos",
+				key:       "live_photos",
+				help:      "Не считать .heic + .mov дубликатами (Live Photos)",
+				boolValue: config.DefaultLivePhotos,
+				stype:     settingTypeBool,
 			},
 			{
-				label: "Включать видео",
-				key:   "include_video",
-				help:  "Обрабатывать видеофайлы",
-				value: config.DefaultIncludeVideo,
-				stype: settingTypeBool,
+				label:     "Включать видео",
+				key:       "include_video",
+				help:      "Обрабатывать видеофайлы",
+				boolValue: config.DefaultIncludeVideo,
+				stype:     settingTypeBool,
 			},
 			{
-				label: "Использовать дату изменения",
-				key:   "use_mtime",
-				help:  "Если нет EXIF/имени, использовать ModTime файла",
-				value: config.DefaultUseMTime,
-				stype: settingTypeBool,
+				label:     "Использовать дату изменения",
+				key:       "use_mtime",
+				help:      "Если нет EXIF/имени, использовать ModTime файла",
+				boolValue: config.DefaultUseMTime,
+				stype:     settingTypeBool,
 			},
 		},
 		input: ti,
@@ -175,12 +196,12 @@ func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Переходим в ручной ввод
 				m.settings.templateSelect = false
 				m.settings.editing = true
-				m.settings.input.SetValue(m.settings.items[m.settings.cursor].value.(string))
+				m.settings.input.SetValue(m.settings.items[m.settings.cursor].AsString())
 				m.settings.input.Focus()
 				return m, textinput.Blink
 			}
 			// Выбрали готовый пресет
-			m.settings.items[m.settings.cursor].value = preset.value
+			m.settings.items[m.settings.cursor].stringValue = preset.value
 			m.settings.templateSelect = false
 			return m, nil
 		}
@@ -201,7 +222,7 @@ func (m Model) updateSettingsEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter:
 			m.settings.editing = false
 			m.settings.input.Blur()
-			m.settings.items[m.settings.cursor].value = m.settings.input.Value()
+			m.settings.items[m.settings.cursor].stringValue = m.settings.input.Value()
 			return m, nil
 		}
 	}
@@ -240,7 +261,7 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scan = newScanModel()
 			m.scan.running = true
 			m.scan.progressCh = make(chan runnerProgressMsg, 10)
-			return m, tea.Batch(scanTickCmd(), progressListenCmd(m.scan.progressCh), m.startScan())
+			return m, tea.Batch(progressListenCmd(m.scan.progressCh), m.startScan())
 		}
 
 		switch msg.String() {
@@ -248,11 +269,11 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			item := &m.settings.items[m.settings.cursor]
 			switch item.stype {
 			case settingTypeBool:
-				item.value = !item.value.(bool)
+				item.boolValue = !item.boolValue
 			case settingTypeText:
 				// Открываем выбор пресета
 				m.settings.templateSelect = true
-				idx, _ := findPreset(item.value.(string))
+				idx, _ := findPreset(item.stringValue)
 				m.settings.templateCursor = idx
 				return m, nil
 			}
@@ -296,7 +317,6 @@ func (m Model) viewSettings() string {
 	}
 
 	// Список настроек
-	labelWidth := 28
 	for i, item := range m.settings.items {
 		cursor := "  "
 		if m.settings.cursor == i {
@@ -306,7 +326,7 @@ func (m Model) viewSettings() string {
 		var valueStr string
 		switch item.stype {
 		case settingTypeBool:
-			if item.value.(bool) {
+			if item.boolValue {
 				valueStr = successStyle.Render("✓ да")
 			} else {
 				valueStr = errorStyle.Render("✗ нет")
@@ -315,11 +335,11 @@ func (m Model) viewSettings() string {
 			if m.settings.editing && m.settings.cursor == i {
 				valueStr = m.settings.input.View()
 			} else {
-				valueStr = highlightStyle.Render(formatTemplateDisplay(item.value.(string)))
+				valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
 			}
 		}
 
-		labelCol := lipgloss.NewStyle().Width(labelWidth).Render(cursor + item.label + ":")
+		labelCol := settingLabelStyle.Render(cursor + item.label + ":")
 		line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, valueStr)
 		b.WriteString(line + "\n")
 
@@ -347,7 +367,6 @@ func (m Model) viewTemplateSelect() string {
 	b.WriteString(highlightStyle.Render("Выберите формат папок:"))
 	b.WriteString("\n\n")
 
-	labelWidth := 16
 	for i, preset := range templatePresets {
 		cursor := "  "
 		if m.settings.templateCursor == i {
@@ -358,7 +377,7 @@ func (m Model) viewTemplateSelect() string {
 			b.WriteString(cursor + preset.label + "\n")
 		} else {
 			example := time.Now().Format(preset.value)
-			labelCol := lipgloss.NewStyle().Width(labelWidth).Render(cursor + preset.label)
+			labelCol := templateLabelStyle.Render(cursor + preset.label)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+example)
 			b.WriteString(line + "\n")
 		}
@@ -375,7 +394,7 @@ func (m Model) viewTemplateSelect() string {
 func (m Model) GetSettingBool(key string) bool {
 	for _, s := range m.settings.items {
 		if s.key == key && s.stype == settingTypeBool {
-			return s.value.(bool)
+			return s.boolValue
 		}
 	}
 	return false
@@ -385,7 +404,7 @@ func (m Model) GetSettingBool(key string) bool {
 func (m Model) GetSettingString(key string) string {
 	for _, s := range m.settings.items {
 		if s.key == key && s.stype == settingTypeText {
-			return s.value.(string)
+			return s.stringValue
 		}
 	}
 	return ""

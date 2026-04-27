@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 
@@ -157,7 +158,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Ошибка: целевая папка недоступна для записи: %v\n", err)
 		os.Exit(1)
 	}
-	tmpFile.Close()
+	if err := tmpFile.Close(); err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка: целевая папка недоступна для записи: %v\n", err)
+		os.Exit(1)
+	}
 	os.Remove(tmpFile.Name())
 
 	if template == "" {
@@ -221,7 +225,10 @@ func main() {
 		UseMTime:     useMTime,
 	}
 
-	res, err := runner.Run(context.Background(), cfg, func(stage string, current, total int) {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
 		fmt.Fprintf(os.Stderr, "%s: %d/%d\n", stage, current, total)
 	})
 	if err != nil {
@@ -231,7 +238,7 @@ func main() {
 
 	// Копирование
 	c := copier.New(dryRun, target)
-	stats, err := c.Copy(context.Background(), res.Entries, nil)
+	stats, err := c.Copy(ctx, res.Entries, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка копирования: %v\n", err)
 		// Выводим частичную статистику перед выходом

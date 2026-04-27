@@ -34,15 +34,6 @@ func (s sourcesModel) Init() tea.Cmd {
 
 func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case updateCheckMsg:
-		m.updateResult = &msg.result
-		return m, nil
-
-	case tea.WindowSizeMsg:
-		m.sources.width = msg.Width
-		m.sources.height = msg.Height
-		return m, nil
-
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:

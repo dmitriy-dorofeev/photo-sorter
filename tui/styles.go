@@ -24,4 +24,10 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#626262"))
+
+	settingLabelStyle = lipgloss.NewStyle().
+				Width(28)
+
+	templateLabelStyle = lipgloss.NewStyle().
+				Width(16)
 )

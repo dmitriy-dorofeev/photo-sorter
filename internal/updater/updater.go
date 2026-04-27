@@ -70,6 +70,7 @@ func fetchLatestRelease() (*Release, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "photo-sorter")
 
 	resp, err := client.Do(req)
 	if err != nil {

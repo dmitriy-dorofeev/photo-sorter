@@ -47,6 +47,7 @@ func (c *Copier) Copy(
 	var stats Stats
 	total := len(entries)
 	consecutiveErrors := 0
+	syncDirs := make(map[string]struct{})
 
 	if !c.dryRun && c.targetRoot != "" && total > 0 {
 		if err := c.checkDiskSpace(entries); err != nil {
@@ -84,6 +85,9 @@ func (c *Copier) Copy(
 		if err := validateTargetPath(c.targetRoot, e.Target); err != nil {
 			stats.Errors++
 			c.recordError(&stats, err)
+			if c.shouldAbort(&consecutiveErrors, err) {
+				return stats, fmt.Errorf("too many consecutive target errors (%d), aborting", consecutiveErrors)
+			}
 			continue
 		}
 
@@ -93,14 +97,16 @@ func (c *Copier) Copy(
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(e.Target), 0755); err != nil {
+		dir := filepath.Dir(e.Target)
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			stats.Errors++
 			c.recordError(&stats, err)
-			if c.shouldAbort(&consecutiveErrors) {
-				return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+			if c.shouldAbort(&consecutiveErrors, err) {
+				return stats, fmt.Errorf("too many consecutive target errors (%d), aborting", consecutiveErrors)
 			}
 			continue
 		}
+		syncDirs[dir] = struct{}{}
 
 		target := e.Target
 		if info, err := os.Lstat(target); err == nil {
@@ -125,8 +131,8 @@ func (c *Copier) Copy(
 				if err != nil {
 					stats.Errors++
 					c.recordError(&stats, err)
-					if c.shouldAbort(&consecutiveErrors) {
-						return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+					if c.shouldAbort(&consecutiveErrors, err) {
+						return stats, fmt.Errorf("too many consecutive target errors (%d), aborting", consecutiveErrors)
 					}
 					continue
 				}
@@ -142,8 +148,8 @@ func (c *Copier) Copy(
 			}
 			stats.Errors++
 			c.recordError(&stats, err)
-			if c.shouldAbort(&consecutiveErrors) {
-				return stats, fmt.Errorf("target disk unavailable after %d consecutive errors", consecutiveErrors)
+			if c.shouldAbort(&consecutiveErrors, err) {
+				return stats, fmt.Errorf("too many consecutive target errors (%d), aborting", consecutiveErrors)
 			}
 			continue
 		}
@@ -156,9 +162,13 @@ func (c *Copier) Copy(
 		progress(total, total)
 	}
 
-	// Один sync в конце операции вместо sync на каждый файл.
+	// Синхронизируем все затронутые поддиректории и корень,
+	// чтобы метаданные файловой системы гарантированно записались на диск.
 	if !c.dryRun && stats.Copied > 0 && c.targetRoot != "" {
-		_ = syncDir(c.targetRoot)
+		syncDirs[c.targetRoot] = struct{}{}
+		for d := range syncDirs {
+			_ = syncDir(d)
+		}
 	}
 
 	return stats, nil
@@ -182,12 +192,31 @@ func (c *Copier) recordError(stats *Stats, err error) {
 	}
 }
 
+// isTargetError возвращает true, если ошибка связана с целевым диском/директорией.
+// Ошибки вида "файл не найден" (исходный файл удалился между scan и copy)
+// считаются source-ошибками и не приводят к abort.
+func isTargetError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Файл не найден — скорее всего исходный файл удалился, это не target error.
+	if os.IsNotExist(err) {
+		return false
+	}
+	// Все остальные ошибки (permission denied, disk full, not a directory и т.д.)
+	// считаются target-related.
+	return true
+}
+
 // shouldAbort проверяет, не отключился ли целевой диск.
-// Возвращает true, если 3+ ошибок подряд и targetRoot недоступен
+// Возвращает true, если 3+ target-ошибок подряд и targetRoot недоступен
 // (не существует, нет прав, или не является директорией).
-func (c *Copier) shouldAbort(consecutiveErrors *int) bool {
+func (c *Copier) shouldAbort(consecutiveErrors *int, err error) bool {
 	*consecutiveErrors++
 	if *consecutiveErrors < 3 {
+		return false
+	}
+	if !isTargetError(err) {
 		return false
 	}
 	if c.targetRoot == "" {

@@ -5,6 +5,8 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
 
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
@@ -57,6 +59,11 @@ func (r Result) Stats() ResultStats {
 // progress вызывается после завершения каждого этапа (stage: "scan", "dedup", "sort").
 func Run(ctx context.Context, cfg Config, progress func(stage string, current, total int)) (Result, error) {
 	var res Result
+
+	// Валидация шаблона даты: Go time layout не должен содержать %! (MISSING).
+	if strings.Contains(time.Now().Format(cfg.Template), "%!") {
+		return res, fmt.Errorf("invalid date template: %s", cfg.Template)
+	}
 
 	exts := []string{".jpg", ".jpeg", ".png", ".heic", ".heif"}
 	if cfg.IncludeVideo {

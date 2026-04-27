@@ -24,6 +24,8 @@ type copyDoneMsg struct {
 }
 
 type copyModel struct {
+	width   int
+	height  int
 	running bool
 	current int
 	total   int
@@ -84,10 +86,9 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.copy.running = false
 		m.copy.done = true
+		m.copy.stats = msg.stats
 		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.copy.errMsg = msg.err.Error()
-		} else if msg.err == nil {
-			m.copy.stats = msg.stats
 		}
 		m.logCopyResult()
 		return m, nil
@@ -186,8 +187,6 @@ func (m Model) viewCopy() string {
 		b.WriteString(fmt.Sprintf("Ошибок: %d\n", m.copy.stats.Errors))
 		b.WriteString("\n")
 		b.WriteString(helpStyle.Render("enter — начать заново • esc — выход"))
-	} else {
-		b.WriteString(helpStyle.Render("enter — начать копирование • esc — выход"))
 	}
 
 	return b.String()
