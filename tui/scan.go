@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // ---------------------------------------------------------------------------

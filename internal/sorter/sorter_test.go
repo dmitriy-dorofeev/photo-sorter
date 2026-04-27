@@ -104,8 +104,8 @@ func TestBuildTree_NameCollision(t *testing.T) {
 	}
 }
 
-func TestBuildTree_LivePhotos(t *testing.T) {
-	s := New("/target", "2006/01/02", true)
+func buildLivePhotoEntries(t *testing.T, livePhotos bool) []Entry {
+	s := New("/target", "2006/01/02", livePhotos)
 	files := []scanner.FileInfo{
 		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
@@ -122,6 +122,11 @@ func TestBuildTree_LivePhotos(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
+	return entries
+}
+
+func TestBuildTree_LivePhotos(t *testing.T) {
+	entries := buildLivePhotoEntries(t, true)
 	want := filepath.Join("/target", "2024", "05", "20")
 	if filepath.Dir(entries[0].Target) != want {
 		t.Errorf("HEIC target dir = %q, want %q", filepath.Dir(entries[0].Target), want)
@@ -132,23 +137,7 @@ func TestBuildTree_LivePhotos(t *testing.T) {
 }
 
 func TestBuildTree_LivePhotosDisabled(t *testing.T) {
-	s := New("/target", "2006/01/02", false)
-	files := []scanner.FileInfo{
-		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
-		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
-	}
-
-	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
-		if f.Ext == ".heic" {
-			return date(2024, 5, 20), true
-		}
-		return time.Time{}, false // .MOV без даты
-	}
-
-	entries := s.BuildTree(context.Background(), files, nil, resolve)
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
+	entries := buildLivePhotoEntries(t, false)
 	want := filepath.Join("/target", "2024", "05", "20")
 	if filepath.Dir(entries[0].Target) != want {
 		t.Errorf("HEIC target dir = %q, want %q", filepath.Dir(entries[0].Target), want)

@@ -16,6 +16,24 @@ import (
 	"photo-sorter/internal/sorter"
 )
 
+func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.FileInfo, resolve func(context.Context, scanner.FileInfo) (time.Time, bool)) ([]sorter.Entry, int) {
+	ded := deduper.New(files, true)
+	dupResults, err := ded.FindDuplicates(context.Background())
+	if err != nil {
+		t.Fatalf("dedup failed: %v", err)
+	}
+	sort := sorter.New(targetDir, "2006/01/02", true)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolve)
+
+	unsortedCount := 0
+	for _, e := range entries {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
+			unsortedCount++
+		}
+	}
+	return entries, unsortedCount
+}
+
 func countFilesWithExts(dir string, exts ...string) int {
 	want := make(map[string]struct{})
 	for _, e := range exts {
@@ -254,20 +272,7 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 	}
 
 	// Build tree: nothing should go to unsorted
-	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates(context.Background())
-	if err != nil {
-		t.Fatalf("dedup failed: %v", err)
-	}
-	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
-
-	unsortedCount := 0
-	for _, e := range entries {
-		if !e.Skip && sorter.IsUnsorted(e.Target) {
-			unsortedCount++
-		}
-	}
+	entries, unsortedCount := buildTreeAndCountUnsorted(t, targetDir, files, resolver.Resolve)
 	if unsortedCount != 0 {
 		t.Errorf("expected 0 unsorted with UseModTime=true, got %d", unsortedCount)
 	}
@@ -348,20 +353,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	}
 
 	// Build tree and verify targets
-	ded := deduper.New(files, true)
-	dupResults, err := ded.FindDuplicates(context.Background())
-	if err != nil {
-		t.Fatalf("dedup failed: %v", err)
-	}
-	sort := sorter.New(targetDir, "2006/01/02", true)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
-
-	unsortedCount := 0
-	for _, e := range entries {
-		if !e.Skip && sorter.IsUnsorted(e.Target) {
-			unsortedCount++
-		}
-	}
+	entries, unsortedCount := buildTreeAndCountUnsorted(t, targetDir, files, resolver.Resolve)
 	if unsortedCount != 1 {
 		t.Errorf("expected 1 unsorted (DSC_1234.png), got %d", unsortedCount)
 	}
