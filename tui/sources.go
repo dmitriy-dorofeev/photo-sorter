@@ -69,6 +69,7 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.target.cursor = 0
 			}
 			return m, nil
+		default:
 		}
 
 		switch msg.String() {

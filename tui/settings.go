@@ -206,6 +206,8 @@ func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settings.items[m.settings.cursor].stringValue = preset.value
 			m.settings.templateSelect = false
 			return m, nil
+		default:
+			return m, nil
 		}
 	}
 	return m, nil
@@ -226,6 +228,7 @@ func (m Model) updateSettingsEditing(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settings.input.Blur()
 			m.settings.items[m.settings.cursor].stringValue = m.settings.input.Value()
 			return m, nil
+		default:
 		}
 	}
 
@@ -264,6 +267,7 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scan.running = true
 			m.scan.progressCh = make(chan runnerProgressMsg, 10)
 			return m, tea.Batch(progressListenCmd(m.scan.progressCh), m.startScan())
+		default:
 		}
 
 		switch msg.String() {
@@ -277,6 +281,8 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.settings.templateSelect = true
 				idx, _ := findPreset(item.stringValue)
 				m.settings.templateCursor = idx
+				return m, nil
+			default:
 				return m, nil
 			}
 			return m, nil
@@ -339,6 +345,7 @@ func (m Model) viewSettings() string {
 			} else {
 				valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
 			}
+		default:
 		}
 
 		labelCol := settingLabelStyle.Render(cursor + item.label + ":")

@@ -53,6 +53,7 @@ func (m Model) updateTarget(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyLeft:
 			m.screen = ScreenSources
 			return m, nil
+		default:
 		}
 
 		switch msg.String() {

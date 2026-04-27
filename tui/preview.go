@@ -27,6 +27,8 @@ func (m Model) updatePreview(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copyProgress.Store(0)
 			m.copyTotal.Store(int64(len(m.entries)))
 			return m, tea.Batch(copyTickCmd(m), m.startCopy())
+		default:
+			return m, nil
 		}
 	}
 	return m, nil

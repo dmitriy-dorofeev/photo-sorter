@@ -210,6 +210,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scan = newScanModel()
 			m.screen = ScreenSettings
 			return m, nil
+		default:
 		}
 		switch msg.String() {
 		case "enter":
