@@ -89,8 +89,8 @@ func TestEndToEnd(t *testing.T) {
 				t.Errorf("IMG_20230801.jpg: expected 2023-08-01, got %v", dateMap[f.Path])
 			}
 		case "photo_no_date.jpg":
-			if !okMap[f.Path] {
-				t.Errorf("photo_no_date.jpg: expected EXIF date, got no date")
+			if okMap[f.Path] {
+				t.Errorf("photo_no_date.jpg: expected no date with UseModTime=false, got %v", dateMap[f.Path])
 			}
 		case "live_photo.MOV":
 			// With UseModTime=false, MOV without metadata should NOT resolve
@@ -116,10 +116,10 @@ func TestEndToEnd(t *testing.T) {
 		t.Fatalf("dedup failed: %v", err)
 	}
 
-	// All minimal.jpg copies (7 files, 506 bytes) should form one duplicate group
+	// All minimal.jpg copies (6 files, 506 bytes) should form one duplicate group
 	var minimalDupGroup *deduper.Result
 	for i, r := range dupResults {
-		if r.Original.Size == 506 && len(r.Duplicates) >= 6 {
+		if r.Original.Size == 506 && len(r.Duplicates) >= 5 {
 			minimalDupGroup = &dupResults[i]
 			break
 		}
@@ -165,8 +165,8 @@ func TestEndToEnd(t *testing.T) {
 	if skipCount != len(minimalDupGroup.Duplicates) {
 		t.Errorf("expected %d skipped, got %d", len(minimalDupGroup.Duplicates), skipCount)
 	}
-	// Files without date: live_photo.HEIC, live_photo.MOV, video.mp4 = 3 unsorted
-	if unsortedCount != 3 {
+	// Files without date: live_photo.HEIC, live_photo.MOV, video.mp4, photo_no_date.jpg = 4 unsorted
+	if unsortedCount != 4 {
 		t.Errorf("expected 3 unsorted entries, got %d", unsortedCount)
 	}
 

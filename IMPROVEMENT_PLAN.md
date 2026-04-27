@@ -28,40 +28,7 @@
 
 ## 6. Тесты и тестовые данные
 
-### 6.1 🟡 Misleading fixture: `photo_no_date.jpg` содержит EXIF
-**Файл:** `testdata/e2e/source/2023/photo_no_date.jpg`  
-**Проблема:** файл byte-identical с `minimal.jpg` (506 B, реальный EXIF 2024-03-15). Имя и документация говорят "без даты", а на деле дата есть.
-
-**Исправение:** заменить на настоящий JPEG-болванку без EXIF-сегмента.
-
-### 6.2 🟡 Orphaned test file
-**Файл:** `testdata/e2e/source/root_photo.jpg`  
-**Проблема:** никакой тест не сканирует `e2e/source/` напрямую — все указывают на `source/2023/` или `source/2024/`.
-
-**Исправение:** удалить или переместить в `2023/` (там уже есть `root_photo.jpg`).
-
-### 6.3 🟡 `internal/hasher` — только benchmark, нет unit-тестов
-**Файл:** `internal/hasher/hasher_test.go`  
-**Проблема:** нет тестов на успешное хеширование, ошибку открытия, empty file, symlink rejection.
-
-**Исправение:** добавить `TestHashFile`, `TestHashFile_NotRegular`, `TestHashFile_Empty`.
-
-### 6.4 🟡 `tui` — полностью без тестов
-**Файл:** `tui/*.go`  
-**Проблема:** ~1700 строк TUI-логики не покрыты ни одним тестом.
-
-**Исправение:** добавить минимальный набор:
-- `TestNewModel` — начальное состояние.
-- `TestScreenTransitions` — переходы Sources → Target → Settings и обратно.
-- `TestSettingsValidation` — ввод невалидного шаблона.
-
-### 6.5 🟡 `TestCLIJSON` скрывает stderr
-**Файл:** `cmd/main_test.go:145`  
-**Проблема:** использует `cmd.Output()` вместо `cmd.CombinedOutput()`. Предупреждения и ошибки от runner теряются.
-
-**Исправение:** перейти на `CombinedOutput()`.
-
----
+**Статус: ✅ Выполнено.**
 
 ## 7. Качество кода и архитектура
 

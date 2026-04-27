@@ -1,0 +1,163 @@
+package tui
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"photo-sorter/internal/config"
+)
+
+func TestNewModel(t *testing.T) {
+	m := NewModel("1.2.3")
+
+	if m.screen != ScreenSources {
+		t.Errorf("expected initial screen Sources, got %d", m.screen)
+	}
+	if m.version != "1.2.3" {
+		t.Errorf("expected version 1.2.3, got %s", m.version)
+	}
+	if len(m.Sources) != 0 {
+		t.Errorf("expected empty Sources, got %v", m.Sources)
+	}
+	if len(m.settings.items) != 4 {
+		t.Errorf("expected 4 settings, got %d", len(m.settings.items))
+	}
+	if m.settings.cursor != 0 {
+		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
+	}
+	if m.settings.items[0].key != "template" {
+		t.Errorf("expected first setting key 'template', got %s", m.settings.items[0].key)
+	}
+	if m.settings.items[0].AsString() != config.DefaultTemplate {
+		t.Errorf("expected default template %q, got %q", config.DefaultTemplate, m.settings.items[0].AsString())
+	}
+	if m.settings.items[1].key != "live_photos" {
+		t.Errorf("expected second setting key 'live_photos', got %s", m.settings.items[1].key)
+	}
+	if m.settings.items[1].AsBool() != config.DefaultLivePhotos {
+		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[1].AsBool())
+	}
+	if m.copyProgress == nil || m.copyTotal == nil {
+		t.Error("expected copyProgress and copyTotal to be initialized")
+	}
+}
+
+func TestScreenTransitions(t *testing.T) {
+	tmp := t.TempDir()
+	photos := filepath.Join(tmp, "photos")
+	output := filepath.Join(tmp, "output")
+	mustMkdir(t, photos)
+	mustMkdir(t, output)
+
+	m := NewModel("test")
+
+	// Prepare source browser
+	m.sources.currentDir = tmp
+	m.sources.items, _ = loadDirItems(tmp)
+	m.sources.cursor = 1 // first real dir (output or photos, sorted alphabetically)
+
+	// Select source with space
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = newM.(Model)
+	if len(m.Sources) == 0 {
+		t.Fatal("expected at least one source selected")
+	}
+
+	// Move to target screen
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = newM.(Model)
+	if m.screen != ScreenTarget {
+		t.Errorf("expected screen Target, got %d", m.screen)
+	}
+
+	// Prepare target browser and select target
+	m.target.currentDir = tmp
+	m.target.items, _ = loadDirItems(tmp)
+	m.target.cursor = 1
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = newM.(Model)
+	if m.Target == "" {
+		t.Fatal("expected target to be selected")
+	}
+
+	// Move to settings screen
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = newM.(Model)
+	if m.screen != ScreenSettings {
+		t.Errorf("expected screen Settings, got %d", m.screen)
+	}
+
+	// Back to target
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = newM.(Model)
+	if m.screen != ScreenTarget {
+		t.Errorf("expected screen Target after back, got %d", m.screen)
+	}
+
+	// Back to sources
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = newM.(Model)
+	if m.screen != ScreenSources {
+		t.Errorf("expected screen Sources after second back, got %d", m.screen)
+	}
+}
+
+func TestSettingsValidation(t *testing.T) {
+	m := NewModel("test")
+	m.screen = ScreenSettings
+
+	// Open template preset selector
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = newM.(Model)
+	if !m.settings.templateSelect {
+		t.Fatal("expected templateSelect to be true")
+	}
+
+	// Choose custom preset (last item)
+	m.settings.templateCursor = len(templatePresets) - 1
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.settings.templateSelect {
+		t.Error("expected templateSelect to be closed")
+	}
+	if !m.settings.editing {
+		t.Error("expected editing mode for custom template")
+	}
+	if cmd == nil {
+		t.Error("expected textinput.Blink command")
+	}
+
+	// Type invalid template
+	m.settings.input.SetValue("invalid!!!")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.settings.editing {
+		t.Error("expected editing mode to finish")
+	}
+	if got := m.GetSettingString("template"); got != "invalid!!!" {
+		t.Errorf("expected template 'invalid!!!', got %q", got)
+	}
+
+	// formatTemplateDisplay must not panic for invalid layouts
+	display := formatTemplateDisplay("invalid!!!")
+	if display != "Свой формат (invalid!!!)" {
+		t.Errorf("unexpected display for invalid template: got %q", display)
+	}
+
+	// Ensure GetSettingBool returns default for unknown key
+	if m.GetSettingBool("nonexistent") {
+		t.Error("expected false for unknown bool key")
+	}
+	if m.GetSettingString("nonexistent") != "" {
+		t.Error("expected empty string for unknown string key")
+	}
+}
+
+func mustMkdir(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+}

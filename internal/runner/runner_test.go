@@ -39,8 +39,8 @@ func TestRun_EndToEnd(t *testing.T) {
 	for _, g := range res.Duplicates {
 		dupCount += len(g.Duplicates)
 	}
-	if dupCount < 6 {
-		t.Errorf("expected at least 6 duplicates (minimal.jpg copies), got %d", dupCount)
+	if dupCount < 5 {
+		t.Errorf("expected at least 5 duplicates (minimal.jpg copies), got %d", dupCount)
 	}
 
 	// Verify live_photo files are NOT duplicates
@@ -52,15 +52,15 @@ func TestRun_EndToEnd(t *testing.T) {
 		}
 	}
 
-	// Verify unsorted count: live_photo.HEIC, live_photo.MOV, video.mp4 = 3
+	// Verify unsorted count: live_photo.HEIC, live_photo.MOV, video.mp4, photo_no_date.jpg = 4
 	var unsortedCount int
 	for _, e := range res.Entries {
 		if !e.Skip && sorter.IsUnsorted(e.Target) {
 			unsortedCount++
 		}
 	}
-	if unsortedCount != 3 {
-		t.Errorf("expected 3 unsorted, got %d", unsortedCount)
+	if unsortedCount != 4 {
+		t.Errorf("expected 4 unsorted, got %d", unsortedCount)
 	}
 }
 
