@@ -266,7 +266,8 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.scan = newScanModel()
 			m.scan.running = true
 			m.scan.progressCh = make(chan runnerProgressMsg, 10)
-			return m, tea.Batch(progressListenCmd(m.scan.progressCh), m.startScan())
+			m, cmd := m.startScan()
+			return m, tea.Batch(progressListenCmd(m.scan.progressCh), cmd)
 		default:
 		}
 

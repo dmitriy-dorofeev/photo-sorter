@@ -91,7 +91,7 @@ func (s scanModel) Init() tea.Cmd {
 // Запуск сканирования
 // ---------------------------------------------------------------------------
 
-func (m *Model) startScan() tea.Cmd {
+func (m Model) startScan() (Model, tea.Cmd) {
 	if m.scanCancel != nil {
 		m.scanCancel()
 	}
@@ -112,7 +112,7 @@ func (m *Model) startScan() tea.Cmd {
 
 	progressCh := m.scan.progressCh
 
-	return func() tea.Msg {
+	return m, func() tea.Msg {
 		res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
 			if progressCh == nil {
 				return
@@ -221,7 +221,8 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.scan = newScanModel()
 				m.scan.running = true
 				m.scan.progressCh = make(chan runnerProgressMsg, 10)
-				return m, tea.Batch(progressListenCmd(m.scan.progressCh), m.startScan())
+				m, cmd := m.startScan()
+				return m, tea.Batch(progressListenCmd(m.scan.progressCh), cmd)
 			}
 			if m.scan.done {
 				m.screen = ScreenPreview

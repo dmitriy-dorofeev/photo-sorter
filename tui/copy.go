@@ -50,7 +50,7 @@ func copyTickCmd(m Model) tea.Cmd {
 	})
 }
 
-func (m Model) startCopy() tea.Cmd {
+func (m Model) startCopy() (Model, tea.Cmd) {
 	// Отменяем предыдущее копирование, если оно ещё бежит.
 	if m.copyCancel != nil {
 		m.copyCancel()
@@ -61,7 +61,7 @@ func (m Model) startCopy() tea.Cmd {
 
 	dryRun := false
 
-	return func() tea.Msg {
+	return m, func() tea.Msg {
 		c := copier.New(dryRun, m.Target)
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
 			m.copyProgress.Store(int64(cur))
@@ -91,7 +91,7 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.copy.errMsg = msg.err.Error()
 		}
-		m.logCopyResult()
+		m = m.logCopyResult()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -119,12 +119,12 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) logCopyResult() {
+func (m Model) logCopyResult() Model {
 	logPath := filepath.Join(m.Target, time.Now().Format("2006-01-02_15-04-05")+"_photo-sorter.log")
 	l, err := logger.New(logPath)
 	if err != nil {
 		m.copy.logErr = fmt.Sprintf("Не удалось создать лог: %v", err)
-		return
+		return m
 	}
 	defer l.Close()
 
@@ -141,6 +141,7 @@ func (m Model) logCopyResult() {
 	if m.copy.errMsg != "" {
 		l.Log(fmt.Sprintf("Fatal error: %s", m.copy.errMsg))
 	}
+	return m
 }
 
 func (m Model) viewCopy() string {
