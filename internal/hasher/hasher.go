@@ -48,7 +48,9 @@ func HashFile(ctx context.Context, path string) (uint64, error) {
 		}
 		n, err := f.Read(buf)
 		if n > 0 {
-			_, _ = h.Write(buf[:n])
+			if _, err := h.Write(buf[:n]); err != nil {
+				return 0, err
+			}
 		}
 		if err == io.EOF {
 			break

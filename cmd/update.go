@@ -268,9 +268,11 @@ func extractBinary(archivePath, destDir, binName string) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			_, err = io.Copy(out, tr)
-			out.Close()
-			if err != nil {
+			_, copyErr := io.Copy(out, tr)
+			if err := out.Close(); err != nil {
+				return "", fmt.Errorf("закрытие файла: %w", err)
+			}
+			if copyErr != nil {
 				return "", err
 			}
 			return outPath, nil
@@ -292,7 +294,7 @@ func replaceExecutable(newBin string) error {
 	}
 
 	backupPath := execPath + ".bak"
-	_ = os.Remove(backupPath)
+	removeSilent(backupPath)
 	if err := os.Rename(execPath, backupPath); err != nil {
 		return fmt.Errorf("бэкап: %w", err)
 	}
@@ -302,35 +304,35 @@ func replaceExecutable(newBin string) error {
 	execDir := filepath.Dir(execPath)
 	tmpFile, err := os.CreateTemp(execDir, filepath.Base(execPath)+".tmp.")
 	if err != nil {
-		_ = os.Rename(backupPath, execPath)
+		renameSilent(backupPath, execPath)
 		return fmt.Errorf("создание временного файла: %w", err)
 	}
 	tmpPath := tmpFile.Name()
 
 	src, err := os.Open(newBin)
 	if err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		_ = os.Rename(backupPath, execPath)
+		closeSilent(tmpFile)
+		removeSilent(tmpPath)
+		renameSilent(backupPath, execPath)
 		return fmt.Errorf("открытие нового бинарника: %w", err)
 	}
 	defer src.Close()
 
 	if _, err := io.Copy(tmpFile, src); err != nil {
-		_ = tmpFile.Close()
-		_ = os.Remove(tmpPath)
-		_ = os.Rename(backupPath, execPath)
+		closeSilent(tmpFile)
+		removeSilent(tmpPath)
+		renameSilent(backupPath, execPath)
 		return fmt.Errorf("копирование: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {
-		_ = os.Remove(tmpPath)
-		_ = os.Rename(backupPath, execPath)
+		removeSilent(tmpPath)
+		renameSilent(backupPath, execPath)
 		return fmt.Errorf("закрытие временного файла: %w", err)
 	}
 
 	if err := os.Rename(tmpPath, execPath); err != nil {
-		_ = os.Remove(tmpPath)
-		_ = os.Rename(backupPath, execPath)
+		removeSilent(tmpPath)
+		renameSilent(backupPath, execPath)
 		return fmt.Errorf("замена: %w", err)
 	}
 
@@ -338,7 +340,7 @@ func replaceExecutable(newBin string) error {
 		fmt.Fprintf(os.Stderr, "Предупреждение: не удалось установить права: %v\n", err)
 	}
 
-	_ = os.Remove(backupPath)
+	removeSilent(backupPath)
 	return nil
 }
 
@@ -354,4 +356,24 @@ func archName(a string) string {
 		return "x86_64"
 	}
 	return a
+}
+
+// cleanup helpers — ignore errors on best-effort recovery operations.
+
+func removeSilent(path string) {
+	if err := os.Remove(path); err != nil {
+		// cleanup best-effort
+	}
+}
+
+func renameSilent(oldpath, newpath string) {
+	if err := os.Rename(oldpath, newpath); err != nil {
+		// cleanup best-effort
+	}
+}
+
+func closeSilent(c io.Closer) {
+	if err := c.Close(); err != nil {
+		// cleanup best-effort
+	}
 }

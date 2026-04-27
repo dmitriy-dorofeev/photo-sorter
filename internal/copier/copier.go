@@ -168,7 +168,9 @@ func (c *Copier) Copy(
 	if !c.dryRun && stats.Copied > 0 && c.targetRoot != "" {
 		syncDirs[c.targetRoot] = struct{}{}
 		for d := range syncDirs {
-			_ = syncDir(d)
+			if err := syncDir(d); err != nil {
+				// ignore fsync errors on directories
+			}
 		}
 	}
 
@@ -334,9 +336,13 @@ func copyFile(ctx context.Context, src, dst string) error {
 	// cleanup удаляет временный файл при любой ошибке.
 	cleanup := true
 	defer func() {
-		tmpFile.Close()
+		if err := tmpFile.Close(); err != nil {
+			// ignore cleanup close error
+		}
 		if cleanup {
-			os.Remove(tmpPath)
+			if err := os.Remove(tmpPath); err != nil {
+				// ignore cleanup remove error
+			}
 		}
 	}()
 
@@ -365,7 +371,9 @@ func copyFile(ctx context.Context, src, dst string) error {
 			if err1 == nil && err2 == nil && hSrc == hDst {
 				// Тот же файл — пропускаем, удаляем temp.
 				cleanup = false
-				os.Remove(tmpPath)
+				if err := os.Remove(tmpPath); err != nil {
+					// ignore cleanup remove error
+				}
 				return errSkipCollision
 			}
 			return fmt.Errorf("target collision detected: %s appeared unexpectedly", dst)

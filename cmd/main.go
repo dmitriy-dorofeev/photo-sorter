@@ -178,7 +178,9 @@ func validateInputs(cfg runner.Config, format string) error {
 	if err := tmpFile.Close(); err != nil {
 		return fmt.Errorf("ошибка: целевая папка недоступна для записи: %w", err)
 	}
-	os.Remove(tmpFile.Name())
+	if err := os.Remove(tmpFile.Name()); err != nil {
+		// ignore cleanup error
+	}
 
 	if cfg.Template == "" {
 		return fmt.Errorf("ошибка: шаблон даты не может быть пустым (--template)")

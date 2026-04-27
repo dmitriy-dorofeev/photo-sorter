@@ -56,7 +56,11 @@ func TestScreenTransitions(t *testing.T) {
 
 	// Prepare source browser
 	m.sources.currentDir = tmp
-	m.sources.items, _ = loadDirItems(tmp)
+	items, err := loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.sources.items = items
 	m.sources.cursor = 1 // first real dir (output or photos, sorted alphabetically)
 
 	// Select source with space
@@ -75,7 +79,11 @@ func TestScreenTransitions(t *testing.T) {
 
 	// Prepare target browser and select target
 	m.target.currentDir = tmp
-	m.target.items, _ = loadDirItems(tmp)
+	items, err = loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.target.items = items
 	m.target.cursor = 1
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = newM.(Model)

@@ -71,7 +71,10 @@ func (m Model) viewPreview() string {
 				b.WriteString(fmt.Sprintf("  … и ещё %d папок\n", len(dirs)-shown))
 				break
 			}
-			rel, _ := filepath.Rel(m.Target, d)
+			rel, err := filepath.Rel(m.Target, d)
+			if err != nil {
+				rel = d
+			}
 			b.WriteString(fmt.Sprintf("  📁 %s (%d файлов)\n", rel, m.dirFileCount(d)))
 			shown++
 		}
