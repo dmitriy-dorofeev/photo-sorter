@@ -130,92 +130,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// TUI-режим: если не указаны source/target и -tui не выключен явно
-	if useTUI && len(sources) == 0 && target == "" {
-		tui.Run(version)
-		return
-	}
-
-	// CLI-режим
-	if len(sources) == 0 {
-		fmt.Fprintln(os.Stderr, "Ошибка: укажите хотя бы одну исходную папку (--source)")
-		flag.Usage()
-		os.Exit(1)
-	}
-	if target == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: укажите целевую папку (--target)")
-		flag.Usage()
-		os.Exit(1)
-	}
-
-	// Проверка доступности target для записи
-	if err := os.MkdirAll(target, 0750); err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка: не удалось создать целевую папку: %v\n", err)
-		os.Exit(1)
-	}
-	tmpFile, err := os.CreateTemp(target, ".write-test-*")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка: целевая папка недоступна для записи: %v\n", err)
-		os.Exit(1)
-	}
-	if err := tmpFile.Close(); err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка: целевая папка недоступна для записи: %v\n", err)
-		os.Exit(1)
-	}
-	os.Remove(tmpFile.Name())
-
-	if template == "" {
-		fmt.Fprintln(os.Stderr, "Ошибка: шаблон даты не может быть пустым (--template)")
-		os.Exit(1)
-	}
-
-	if format != "text" && format != "json" {
-		fmt.Fprintln(os.Stderr, "Ошибка: формат должен быть 'text' или 'json'")
-		os.Exit(1)
-	}
-
-	for _, src := range sources {
-		info, err := os.Stat(src)
-		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "Ошибка: исходная папка не существует: %s\n", src)
-			} else {
-				fmt.Fprintf(os.Stderr, "Ошибка: исходная папка недоступна: %s\n", src)
-			}
-			os.Exit(1)
-		}
-		if !info.IsDir() {
-			fmt.Fprintf(os.Stderr, "Ошибка: %s не является директорией\n", src)
-			os.Exit(1)
-		}
-	}
-
-	// Проверка на пересечение source и target (self-copy).
-	absTarget, err := filepath.Abs(target)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка: не удалось определить абсолютный путь target: %v\n", err)
-		os.Exit(1)
-	}
-	for _, src := range sources {
-		absSrc, err := filepath.Abs(src)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Ошибка: не удалось определить абсолютный путь source: %v\n", err)
-			os.Exit(1)
-		}
-		if absSrc == absTarget {
-			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка и целевая папка не могут совпадать: %s\n", src)
-			os.Exit(1)
-		}
-		if strings.HasPrefix(absTarget, absSrc+string(filepath.Separator)) {
-			fmt.Fprintf(os.Stderr, "Ошибка: целевая папка не может быть внутри исходной: %s\n", src)
-			os.Exit(1)
-		}
-		if strings.HasPrefix(absSrc, absTarget+string(filepath.Separator)) {
-			fmt.Fprintf(os.Stderr, "Ошибка: исходная папка не может быть внутри целевой: %s\n", src)
-			os.Exit(1)
-		}
-	}
-
 	cfg := runner.Config{
 		Sources:      sources,
 		Target:       target,
@@ -225,6 +139,94 @@ func main() {
 		UseMTime:     useMTime,
 	}
 
+	// TUI-режим: если не указаны source/target и -tui не выключен явно
+	if useTUI && len(sources) == 0 && target == "" {
+		tui.Run(version)
+		return
+	}
+
+	// CLI-режим
+	if err := validateInputs(cfg, format); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if err := runCLI(cfg, dryRun, format); err != nil {
+		fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// validateInputs проверяет корректность аргументов CLI.
+func validateInputs(cfg runner.Config, format string) error {
+	if len(cfg.Sources) == 0 {
+		return fmt.Errorf("Ошибка: укажите хотя бы одну исходную папку (--source)")
+	}
+	if cfg.Target == "" {
+		return fmt.Errorf("Ошибка: укажите целевую папку (--target)")
+	}
+
+	// Проверка доступности target для записи
+	if err := os.MkdirAll(cfg.Target, 0750); err != nil {
+		return fmt.Errorf("Ошибка: не удалось создать целевую папку: %w", err)
+	}
+	tmpFile, err := os.CreateTemp(cfg.Target, ".write-test-*")
+	if err != nil {
+		return fmt.Errorf("Ошибка: целевая папка недоступна для записи: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("Ошибка: целевая папка недоступна для записи: %w", err)
+	}
+	os.Remove(tmpFile.Name())
+
+	if cfg.Template == "" {
+		return fmt.Errorf("Ошибка: шаблон даты не может быть пустым (--template)")
+	}
+
+	if format != "text" && format != "json" {
+		return fmt.Errorf("Ошибка: формат должен быть 'text' или 'json'")
+	}
+
+	for _, src := range cfg.Sources {
+		info, err := os.Stat(src)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("Ошибка: исходная папка не существует: %s", src)
+			}
+			return fmt.Errorf("Ошибка: исходная папка недоступна: %s", src)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("Ошибка: %s не является директорией", src)
+		}
+	}
+
+	// Проверка на пересечение source и target (self-copy).
+	absTarget, err := filepath.Abs(cfg.Target)
+	if err != nil {
+		return fmt.Errorf("Ошибка: не удалось определить абсолютный путь target: %w", err)
+	}
+	for _, src := range cfg.Sources {
+		absSrc, err := filepath.Abs(src)
+		if err != nil {
+			return fmt.Errorf("Ошибка: не удалось определить абсолютный путь source: %w", err)
+		}
+		if absSrc == absTarget {
+			return fmt.Errorf("Ошибка: исходная папка и целевая папка не могут совпадать: %s", src)
+		}
+		if strings.HasPrefix(absTarget, absSrc+string(filepath.Separator)) {
+			return fmt.Errorf("Ошибка: целевая папка не может быть внутри исходной: %s", src)
+		}
+		if strings.HasPrefix(absSrc, absTarget+string(filepath.Separator)) {
+			return fmt.Errorf("Ошибка: исходная папка не может быть внутри целевой: %s", src)
+		}
+	}
+
+	return nil
+}
+
+// runCLI выполняет pipeline и копирование в CLI-режиме.
+func runCLI(cfg runner.Config, dryRun bool, format string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -232,22 +234,19 @@ func main() {
 		fmt.Fprintf(os.Stderr, "%s: %d/%d\n", stage, current, total)
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 
-	// Копирование
-	c := copier.New(dryRun, target)
+	c := copier.New(dryRun, cfg.Target)
 	stats, err := c.Copy(ctx, res.Entries, nil)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Ошибка копирования: %v\n", err)
-		// Выводим частичную статистику перед выходом
+		// Выводим частичную статистику перед возвратом ошибки
 		if format == "json" {
 			printJSONReport(res, stats)
 		} else {
 			printTextReport(res, stats)
 		}
-		os.Exit(1)
+		return fmt.Errorf("копирование: %w", err)
 	}
 
 	if format == "json" {
@@ -255,6 +254,7 @@ func main() {
 	} else {
 		printTextReport(res, stats)
 	}
+	return nil
 }
 
 // errorStrings преобразует []error в []string для JSON-отчёта.

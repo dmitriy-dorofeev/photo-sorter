@@ -54,7 +54,6 @@ type scanStage int
 
 const (
 	scanStageScanning scanStage = iota
-	scanStageDates
 	scanStageDedup
 	scanStageTree
 	scanStageDone
@@ -62,7 +61,6 @@ const (
 
 var scanStageNames = []string{
 	"Сканирование файлов...",
-	"Определение дат съёмки...",
 	"Поиск дубликатов...",
 	"Построение дерева папок...",
 	"Готово",

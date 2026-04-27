@@ -95,8 +95,8 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	dr := dateresolver.New()
 	dr.UseModTime = cfg.UseMTime
 	dr.ResolveBatch(ctx, files) // batch-вызов exiftool для всех видео
-	sort := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos)
-	res.Entries = sort.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
+	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos)
+	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
 	if progress != nil {
 		progress("sort", len(res.Entries), len(res.Entries))
 	}

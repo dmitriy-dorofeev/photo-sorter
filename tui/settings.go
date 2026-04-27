@@ -31,16 +31,17 @@ var templatePresets = []templatePreset{
 
 // findPreset ищет пресет по Go-значению. Возвращает индекс и found.
 func findPreset(value string) (int, bool) {
+	customIdx := -1
 	for i, p := range templatePresets {
 		if p.value == value {
 			return i, true
 		}
-	}
-	// Не найден — ищем пользовательский пресет по флагу isCustom
-	for i, p := range templatePresets {
 		if p.isCustom {
-			return i, false
+			customIdx = i
 		}
+	}
+	if customIdx >= 0 {
+		return customIdx, false
 	}
 	return 0, false
 }

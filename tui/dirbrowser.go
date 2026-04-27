@@ -120,10 +120,3 @@ func (db *dirBrowserModel) goBack() {
 		db.cursor = 0
 	}
 }
-
-func (db *dirBrowserModel) selectedItem() (dirItem, bool) {
-	if len(db.items) == 0 {
-		return dirItem{}, false
-	}
-	return db.items[db.cursor], true
-}
