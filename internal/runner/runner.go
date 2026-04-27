@@ -57,8 +57,12 @@ func (r Result) Stats() ResultStats {
 
 // Run выполняет полный pipeline: сканирование → дедупликация → сортировка.
 // progress вызывается после завершения каждого этапа (stage: "scan", "dedup", "sort").
-func Run(ctx context.Context, cfg Config, progress func(stage string, current, total int)) (Result, error) {
-	var res Result
+func Run(ctx context.Context, cfg Config, progress func(stage string, current, total int)) (res Result, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic in pipeline: %v", r)
+		}
+	}()
 
 	// Валидация шаблона даты: Go time layout не должен содержать %! (MISSING).
 	if strings.Contains(time.Now().Format(cfg.Template), "%!") {
@@ -101,5 +105,5 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		progress("sort", len(res.Entries), len(res.Entries))
 	}
 
-	return res, nil
+	return res, err
 }

@@ -40,6 +40,9 @@ func (r *Resolver) ResolveBatch(ctx context.Context, files []scanner.FileInfo) {
 		return
 	}
 	r.videoCache = extractVideoDates(ctx, videoFiles, r.ExifToolPath)
+	if r.videoCache == nil {
+		r.videoCache = make(map[string]time.Time)
+	}
 }
 
 // Resolve возвращает наилучшую возможную дату для файла.

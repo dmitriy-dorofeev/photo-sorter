@@ -90,7 +90,7 @@ func (s scanModel) Init() tea.Cmd {
 // Запуск сканирования
 // ---------------------------------------------------------------------------
 
-func (m Model) startScan() tea.Cmd {
+func (m *Model) startScan() tea.Cmd {
 	if m.scanCancel != nil {
 		m.scanCancel()
 	}
