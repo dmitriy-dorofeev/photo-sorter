@@ -4,6 +4,7 @@ photo-sorter
 *.dll
 *.so
 *.dylib
+/bin
 
 # Test binary
 *.test

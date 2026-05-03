@@ -70,6 +70,41 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 
 > Флаг `-ldflags "-X main.version=..."` встраивает версию в бинарник. Без него приложение сообщит версию `dev`.
 
+## macOS .app bundle
+
+Для удобства на macOS можно собрать приложение как `.app` bundle с иконкой в Finder.
+
+### Сборка .app
+
+```bash
+make build-mac-app
+```
+
+Результат:
+- `bin/Photo Sorter.app/` — готовый bundle
+- `bin/Photo Sorter.app.zip` — zip-архив для распространения
+
+### Иконка
+
+Чтобы у bundle была иконка, положите PNG размером **1024×1024** в `build/macos/icon.png` перед сборкой. Скрипт автоматически сконвертирует её в `.icns`.
+
+### Как запускать
+
+1. Распакуйте `Photo Sorter.app.zip` (двойной клик в Finder).
+2. (Опционально) Перетащите `Photo Sorter.app` в папку `Applications`.
+3. Двойной клик по иконке — откроется **Terminal** и в нём запустится TUI.
+
+> Поскольку photo-sorter — консольное TUI-приложение, `.app` bundle не запускает графический интерфейс напрямую, а открывает Terminal. Это ожидаемое поведение.
+
+### Обновление внутри .app bundle
+
+Команда `update` работает и из `.app`, но с ограничениями:
+- Обновляется только бинарник внутри `Photo Sorter.app/Contents/MacOS/photo-sorter`.
+- Wrapper, `Info.plist` и иконка **останутся от первоначальной версии** ( updater скачивает сырой бинарник, а не целый `.app` bundle).
+- Если приложение установлено в `/Applications/`, для обновления могут потребоваться права администратора (`sudo`).
+
+При мажорных обновлениях рекомендуется скачивать новый `.app.zip` вручную.
+
 ## Версионирование и релизы
 
 Проект следует [Semantic Versioning](https://semver.org/lang/ru/): `vMAJOR.MINOR.PATCH`.
@@ -95,6 +130,8 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 ```
 
 > **Примечание:** при обновлении приложение скачивает архив под текущую платформу, распаковывает его и заменяет текущий бинарник. Старая версия сохраняется с суффиксом `.bak` на случай отката. Для сборок из исходников (`dev`) автообновление недоступно.
+>
+> Если приложение запущено из `.app` bundle на macOS, обновляется только бинарник внутри bundle. Wrapper, иконка и `Info.plist` остаются от версии, с которой был скачан `.app.zip`.
 
 ### Как выпустить новый релиз
 
@@ -110,6 +147,7 @@ git push origin v1.0.0
 GitHub Actions запустит [GoReleaser](https://goreleaser.com/), который:
 - соберёт бинарники для **macOS** (Intel + Apple Silicon) и **Linux** (x86_64 + ARM64);
 - упакует их в архивы `.tar.gz`;
+- для **macOS** дополнительно создаст `.app.zip` с иконкой и bundle;
 - сгенерирует файл контрольных сумм `checksums.txt`;
 - создаст страницу Release на GitHub с changelog.
 
@@ -123,10 +161,17 @@ https://github.com/dmitriy-dorofeev/photo-sorter/releases
 Выберите последний релиз, скачайте архив под свою платформу и распакуйте:
 
 ```bash
-# Пример для macOS Apple Silicon
+# Пример для macOS Apple Silicon (сырой бинарник)
 curl -LO https://github.com/dmitriy-dorofeev/photo-sorter/releases/download/v1.0.0/photo-sorter_v1.0.0_Darwin_arm64.tar.gz
 tar -xzf photo-sorter_v1.0.0_Darwin_arm64.tar.gz
 ./photo-sorter --version
+```
+
+Для macOS также доступен `.app` bundle с иконкой:
+```bash
+# Скачайте .app.zip и распакуйте в Applications
+curl -LO https://github.com/dmitriy-dorofeev/photo-sorter/releases/download/v1.0.0/photo-sorter_v1.0.0_macOS_arm64.app.zip
+unzip photo-sorter_v1.0.0_macOS_arm64.app.zip -d /Applications/
 ```
 
 > **Windows не поддерживается** в готовых сборках из-за использования системных вызовов `unix.Statfs` (можно собрать вручную с адаптацией).

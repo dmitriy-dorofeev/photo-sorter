@@ -90,6 +90,10 @@ photo-sorter/
 # Сборка бинарника (через Makefile, с встраиванием версии)
 make build
 
+# Сборка .app bundle для macOS (с иконкой в Finder)
+# Положите иконку 1024×1024 в build/macos/icon.png перед сборкой
+make build-mac-app
+
 # Или вручную с указанием версии
 go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter ./cmd
 
@@ -123,6 +127,7 @@ go test ./internal/ -run TestCancellation -v
 go test ./cmd/ -run TestCLI -v
 
 # Локальная сборка релиза (snapshot) без публикации
+# Для macOS автоматически создаётся .app bundle в dist/*.app.zip
 make snapshot
 ```
 
