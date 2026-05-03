@@ -17,7 +17,9 @@ chmod +x "$APP_PATH/Contents/MacOS/wrapper"
 chmod +x "$APP_PATH/Contents/MacOS/photo-sorter"
 cp build/macos/Info.plist "$APP_PATH/Contents/Info.plist"
 
-if [ -f build/macos/icon.png ]; then
+if [ -f build/macos/photo-sorter.icns ]; then
+    cp build/macos/photo-sorter.icns "$APP_PATH/Contents/Resources/photo-sorter.icns"
+elif [ -f build/macos/icon.png ]; then
     mkdir -p build/macos/icon.iconset
     sips -z 16 16 build/macos/icon.png --out build/macos/icon.iconset/icon_16x16.png >/dev/null 2>&1 || true
     sips -z 32 32 build/macos/icon.png --out build/macos/icon.iconset/icon_16x16@2x.png >/dev/null 2>&1 || true
