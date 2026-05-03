@@ -20,6 +20,6 @@ fi
 
 ZIP_NAME="photo-sorter_${VERSION}_macOS_${GOARCH}.app.zip"
 rm -f "dist/$ZIP_NAME"
-ditto -c -k --keepParent "$APP_PATH" "dist/$ZIP_NAME"
+(cd "$(dirname "$APP_PATH")" && zip -r --symlinks "../../dist/$ZIP_NAME" "$(basename "$APP_PATH")")
 rm -rf "$APP_PATH"
 echo "Created dist/$ZIP_NAME"
