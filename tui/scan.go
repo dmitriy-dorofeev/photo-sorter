@@ -104,6 +104,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		LivePhotos:        m.GetSettingBool("live_photos"),
 		IncludeVideo:      m.GetSettingBool("include_video"),
 		UseMTime:          m.GetSettingBool("use_mtime"),
+		WriteExif:         m.GetSettingBool("write_exif"),
 		DupStrategy:       m.GetSettingString("dup_strategy"),
 		CollisionStrategy: m.GetSettingString("collision_strategy"),
 	}

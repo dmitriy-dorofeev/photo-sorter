@@ -65,6 +65,8 @@ func (m Model) startCopy() (Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		strategy := collision.Strategy(m.GetSettingString("collision_strategy"))
 		c := copier.New(dryRun, m.Target, strategy)
+		c.WriteExif = m.GetSettingBool("write_exif")
+		c.ExifToolPath = "exiftool"
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
 			m.copyProgress.Store(int64(cur))
 			m.copyTotal.Store(int64(tot))
@@ -198,6 +200,12 @@ func (m Model) viewCopy() string {
 		b.WriteString(fmt.Sprintf("Скопировано: %d\n", m.copy.stats.Copied))
 		b.WriteString(fmt.Sprintf("Пропущено (дубли): %d\n", m.copy.stats.Skipped))
 		b.WriteString(fmt.Sprintf("Ошибок: %d\n", m.copy.stats.Errors))
+		if m.copy.stats.ExifWrites > 0 {
+			b.WriteString(fmt.Sprintf("EXIF записан: %d\n", m.copy.stats.ExifWrites))
+		}
+		if m.copy.stats.ExifFailures > 0 {
+			b.WriteString(errorStyle.Render(fmt.Sprintf("Ошибок EXIF: %d", m.copy.stats.ExifFailures)) + "\n")
+		}
 		if m.copy.stats.IntegrityFailures > 0 {
 			b.WriteString(errorStyle.Render(fmt.Sprintf("Ошибок целостности: %d", m.copy.stats.IntegrityFailures)) + "\n")
 		}

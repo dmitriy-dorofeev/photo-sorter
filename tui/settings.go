@@ -203,6 +203,13 @@ func newSettingsModel() settingsModel {
 				stype:     settingTypeBool,
 			},
 			{
+				label:     "Записывать дату в EXIF",
+				key:       "write_exif",
+				help:      "Если дата взята из имени/mtime, записать её в метаданные файла",
+				boolValue: config.DefaultWriteExif,
+				stype:     settingTypeBool,
+			},
+			{
 				label:        "Стратегия дедупликации",
 				key:          "dup_strategy",
 				help:         "Какой файл считать оригиналом при обнаружении дубликатов",

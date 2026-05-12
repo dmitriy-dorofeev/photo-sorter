@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"photo-sorter/internal/collision"
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
@@ -23,10 +24,11 @@ func IsUnsorted(target string) bool {
 
 // Entry описывает одну операцию копирования.
 type Entry struct {
-	Source scanner.FileInfo
-	Target string // полный целевой путь
-	Date   time.Time
-	Skip   bool // true — дубликат, не копировать
+	Source     scanner.FileInfo
+	Target     string // полный целевой путь
+	Date       time.Time
+	DateSource dateresolver.Source // источник даты (EXIF, имя, mtime и т.д.)
+	Skip       bool                // true — дубликат, не копировать
 }
 
 // Sorter строит план сортировки.
@@ -69,6 +71,7 @@ func (s *Sorter) BuildTree(
 	files []scanner.FileInfo,
 	duplicates []deduper.Result,
 	resolveDate func(context.Context, scanner.FileInfo) (time.Time, bool),
+	dateSources map[string]dateresolver.Source,
 ) []Entry {
 	// 1. Множество путей-дубликатов.
 	dupPaths := make(map[string]struct{})
@@ -80,23 +83,27 @@ func (s *Sorter) BuildTree(
 
 	// 2. Кеш дат + Live Photos pre-pass.
 	type dateResult struct {
-		date time.Time
-		ok   bool
+		date       time.Time
+		ok         bool
+		dateSource dateresolver.Source
 	}
 	dateCache := make(map[string]dateResult, len(files))
 	livePhotoDates := make(map[string]time.Time)
+	livePhotoSources := make(map[string]dateresolver.Source)
 
 	for _, f := range files {
 		if ctx.Err() != nil {
 			break
 		}
 		d, ok := resolveDate(ctx, f)
-		dateCache[f.Path] = dateResult{date: d, ok: ok}
+		src := dateSources[f.Path]
+		dateCache[f.Path] = dateResult{date: d, ok: ok, dateSource: src}
 		if ok && s.livePhotos {
 			ext := strings.ToLower(f.Ext)
 			if ext == ".heic" || ext == ".heif" {
 				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
 				livePhotoDates[strings.ToLower(base)] = d
+				livePhotoSources[strings.ToLower(base)] = src
 			}
 		}
 	}
@@ -121,6 +128,7 @@ func (s *Sorter) BuildTree(
 				if d, found := livePhotoDates[strings.ToLower(base)]; found {
 					date = d
 					ok = true
+					res.dateSource = livePhotoSources[strings.ToLower(base)]
 				}
 			}
 		}
@@ -151,10 +159,11 @@ func (s *Sorter) BuildTree(
 		targetCounts[target]++
 
 		entry := Entry{
-			Source: f,
-			Target: target,
-			Date:   date,
-			Skip:   false,
+			Source:     f,
+			Target:     target,
+			Date:       date,
+			DateSource: res.dateSource,
+			Skip:       false,
 		}
 		if _, isDup := dupPaths[f.Path]; isDup {
 			entry.Skip = true

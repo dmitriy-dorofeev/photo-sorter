@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 7 {
-		t.Errorf("expected 7 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 8 {
+		t.Errorf("expected 8 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -46,11 +46,23 @@ func TestNewModel(t *testing.T) {
 	if m.settings.items[2].AsBool() != config.DefaultLivePhotos {
 		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[2].AsBool())
 	}
-	if m.settings.items[6].key != "collision_strategy" {
-		t.Errorf("expected seventh setting key 'collision_strategy', got %s", m.settings.items[6].key)
+	if m.settings.items[5].key != "write_exif" {
+		t.Errorf("expected sixth setting key 'write_exif', got %s", m.settings.items[5].key)
 	}
-	if m.settings.items[6].AsString() != config.DefaultCollisionStrategy {
-		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[6].AsString())
+	if m.settings.items[5].AsBool() != config.DefaultWriteExif {
+		t.Errorf("expected default write_exif %v, got %v", config.DefaultWriteExif, m.settings.items[5].AsBool())
+	}
+	if m.settings.items[6].key != "dup_strategy" {
+		t.Errorf("expected seventh setting key 'dup_strategy', got %s", m.settings.items[6].key)
+	}
+	if m.settings.items[6].AsString() != config.DefaultDupStrategy {
+		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[6].AsString())
+	}
+	if m.settings.items[7].key != "collision_strategy" {
+		t.Errorf("expected eighth setting key 'collision_strategy', got %s", m.settings.items[7].key)
+	}
+	if m.settings.items[7].AsString() != config.DefaultCollisionStrategy {
+		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[7].AsString())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")
@@ -180,5 +192,28 @@ func mustMkdir(t *testing.T, path string) {
 	t.Helper()
 	if err := os.MkdirAll(path, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
+	}
+}
+
+func TestSettings_WriteExif(t *testing.T) {
+	m := NewModel("test")
+	m.screen = ScreenSettings
+
+	if m.GetSettingBool("write_exif") {
+		t.Error("expected write_exif to be false by default")
+	}
+
+	// Перемещаем курсор на write_exif (позиция 5)
+	m.settings.cursor = 5
+
+	// Переключаем настройку
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
+	m = newM.(Model)
+	if m.settings.items[5].key != "write_exif" {
+		t.Fatalf("expected cursor on write_exif, got %s", m.settings.items[m.settings.cursor].key)
+	}
+	// Переключаем значение
+	if !m.GetSettingBool("write_exif") {
+		t.Error("expected write_exif to be true after toggle")
 	}
 }

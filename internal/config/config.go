@@ -23,4 +23,7 @@ const (
 
 	// DefaultCollisionStrategy — стратегия разрешения конфликтов имён.
 	DefaultCollisionStrategy = "counter"
+
+	// DefaultWriteExif — записывать определённую дату в EXIF по умолчанию.
+	DefaultWriteExif = false
 )

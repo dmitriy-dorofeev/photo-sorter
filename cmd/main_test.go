@@ -134,6 +134,9 @@ func TestCLIHelp(t *testing.T) {
 	if !strings.Contains(output, "--collision-strategy") {
 		t.Error("help missing --collision-strategy flag")
 	}
+	if !strings.Contains(output, "--write-exif") {
+		t.Error("help missing --write-exif flag")
+	}
 }
 
 func TestCLIDryRun(t *testing.T) {
@@ -352,6 +355,27 @@ func TestCLI_NameTemplateInvalid(t *testing.T) {
 	output := string(out)
 	if !strings.Contains(output, "invalid file name template") {
 		t.Errorf("expected error about invalid file name template, got:\n%s", output)
+	}
+}
+
+func TestCLI_WriteExifFlag(t *testing.T) {
+	buildTestBinaries()
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cmd := exec.Command(cliBin,
+		"--source", sourceDir,
+		"--target", targetDir,
+		"--dry-run",
+		"--write-exif",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "Найдено файлов:") {
+		t.Errorf("missing stats in output:\n%s", output)
 	}
 }
 

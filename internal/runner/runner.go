@@ -27,6 +27,7 @@ type Config struct {
 	UseMTime          bool     // fallback на дату изменения файла
 	DupStrategy       string   // стратегия выбора оригинала из дубликатов
 	CollisionStrategy string   // стратегия разрешения конфликтов имён
+	WriteExif         bool     // записывать дату в EXIF при копировании
 }
 
 // Result содержит результаты этапов pipeline.
@@ -129,7 +130,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	// 4. Sort
 	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl, collision.Strategy(cfg.CollisionStrategy))
-	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
+	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve, dateSources)
 	if progress != nil {
 		progress("sort", len(res.Entries), len(res.Entries))
 	}

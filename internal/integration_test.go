@@ -4,6 +4,7 @@ import (
 	"context"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.F
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolve, nil)
 
 	unsortedCount := 0
 	for _, e := range entries {
@@ -164,7 +165,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 4. Build tree
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
 	}
@@ -432,7 +433,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
@@ -467,7 +468,7 @@ func TestCancellation(t *testing.T) {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
+	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	c := copier.New(false, targetDir, collision.StrategyCounter)
@@ -656,5 +657,91 @@ func TestEndToEnd_CollisionStrategyHash(t *testing.T) {
 		if _, err := os.Stat(e.Target); os.IsNotExist(err) {
 			t.Errorf("file should exist at %s", e.Target)
 		}
+	}
+}
+
+func TestEndToEnd_WriteExif(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping exiftool integration test in short mode")
+	}
+
+	// Проверяем наличие exiftool
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not found in PATH")
+	}
+
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Копируем реальный JPEG из testdata и удаляем из него EXIF,
+	// чтобы дата определялась только по имени файла.
+	minimalPath := filepath.Join("..", "testdata", "dateresolver", "minimal.jpg")
+	minimalData, err := os.ReadFile(minimalPath)
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	origPath := filepath.Join(sourceDir, "original.jpg")
+	os.WriteFile(origPath, minimalData, 0644)
+
+	// Удаляем EXIF через exiftool
+	cmdClean := exec.Command("exiftool", "-all=", "-o", filepath.Join(sourceDir, "IMG_20240315_143022.jpg"), origPath)
+	if out, err := cmdClean.CombinedOutput(); err != nil {
+		t.Fatalf("failed to strip EXIF: %v (output: %s)", err, string(out))
+	}
+	os.Remove(origPath)
+
+	cfg := runner.Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{original}{ext}",
+		LivePhotos:       false,
+		IncludeVideo:     false,
+		UseMTime:         false,
+		WriteExif:        true,
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(res.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(res.Entries))
+	}
+
+	t.Logf("Entry: Target=%s DateSource=%v Date=%v", res.Entries[0].Target, res.Entries[0].DateSource, res.Entries[0].Date)
+
+	c := copier.New(false, targetDir, collision.StrategyCounter)
+	c.WriteExif = true
+	c.ExifToolPath = "exiftool"
+	stats, err := c.Copy(context.Background(), res.Entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	t.Logf("stats: %+v", stats)
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+	if stats.ExifFailures > 0 {
+		for _, e := range stats.ErrorList {
+			t.Logf("exif error: %v", e)
+		}
+	}
+	if stats.ExifWrites != 1 {
+		t.Errorf("expected 1 exif write, got %d", stats.ExifWrites)
+	}
+
+	// Проверяем, что EXIF действительно записан
+	targetPath := res.Entries[0].Target
+	cmd := exec.Command("exiftool", "-DateTimeOriginal", "-s3", targetPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to read EXIF: %v (output: %s)", err, string(out))
+	}
+	got := strings.TrimSpace(string(out))
+	want := "2024:03:15 14:30:22"
+	if got != want {
+		t.Errorf("EXIF DateTimeOriginal = %q, want %q", got, want)
 	}
 }

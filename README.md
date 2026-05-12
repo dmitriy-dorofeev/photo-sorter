@@ -15,6 +15,7 @@
 - **Копирует** файлы в целевую папку по структуре `YYYY/MM/DD/`
 - **Переименовывает файлы по шаблону** — дата, оригинальное имя, устройство-источник, порядковый номер
 - **Поддерживает Live Photos** — `.HEIC` + `.MOV` с одним basename группируются рядом
+- **Обратная синхронизация метаданных** — если дата определена только по имени или `mtime`, можно записать её в EXIF (`DateTimeOriginal`) через `exiftool`
 - **Безопасно работает** — только копирование, никогда не перемещает
 
 ## Требования
@@ -233,6 +234,9 @@ go test -v ./...
 # Реальное копирование
 ./photo-sorter --source ~/Photos --target ~/Sorted --dry-run=false
 
+# Записать дату в EXIF (если дата взята из имени/mtime)
+./photo-sorter --source ~/Photos --target ~/Sorted --write-exif --dry-run=false
+
 # JSON-отчёт вместо текстового
 ./photo-sorter --source ~/Photos --target ~/Sorted --format=json
 
@@ -252,6 +256,7 @@ go test -v ./...
 - `--include-video` — обрабатывать видео (default: `true`)
 - `--dry-run` — пробный прогон (default: `true`)
 - `--use-mtime` — fallback на дату изменения (default: `true`)
+- `--write-exif` — записывать дату в EXIF, если она взята из имени/mtime (default: `false`)
 - `--format` — формат отчёта: `text` или `json` (default: `text`)
 - `--version` — показать версию приложения и выйти
 - `--check-update` — проверить наличие новой версии на GitHub

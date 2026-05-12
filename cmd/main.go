@@ -47,6 +47,8 @@ type jsonReport struct {
 	Copied          int            `json:"copied"`
 	Skipped         int            `json:"skipped"`
 	Errors          int            `json:"errors"`
+	ExifWrites      int            `json:"exif_writes"`
+	ExifFailures    int            `json:"exif_failures"`
 	BytesCopied     int64          `json:"bytes_copied"`
 	ErrorList       []string       `json:"error_list,omitempty"`
 	DuplicateGroups []jsonDupGroup `json:"duplicate_groups"`
@@ -75,6 +77,7 @@ func main() {
 		useTUI            bool
 		versionFlag       bool
 		checkUpdate       bool
+		writeExif         bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -91,6 +94,7 @@ func main() {
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
+	flag.BoolVar(&writeExif, "write-exif", config.DefaultWriteExif, "Записывать определённую дату в EXIF (только имя/mtime)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -110,6 +114,7 @@ func main() {
   --include-video      Обрабатывать видео (default: true)
   --dry-run            Пробный прогон (default: true)
   --use-mtime          Fallback на дату изменения (default: true)
+  --write-exif         Записывать дату в EXIF при копировании (default: false)
   --dup-strategy       Стратегия дедупликации: path | largest | newest | best-meta (default: path)
   --collision-strategy Стратегия конфликтов имён: counter | hash (default: counter)
 
@@ -151,6 +156,7 @@ func main() {
 		UseMTime:          useMTime,
 		DupStrategy:       dupStrategy,
 		CollisionStrategy: collisionStrategy,
+		WriteExif:         writeExif,
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
@@ -262,6 +268,8 @@ func runCLI(cfg runner.Config, dryRun bool, format string) error {
 	}
 
 	c := copier.New(dryRun, cfg.Target, collision.Strategy(cfg.CollisionStrategy))
+	c.WriteExif = cfg.WriteExif
+	c.ExifToolPath = "exiftool"
 	stats, err := c.Copy(ctx, res.Entries, nil)
 	if err != nil {
 		// Выводим частичную статистику перед возвратом ошибки
@@ -322,6 +330,12 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 	fmt.Printf("Скопировано:  %d\n", stats.Copied)
 	fmt.Printf("Пропущено:    %d\n", stats.Skipped)
 	fmt.Printf("Ошибок:       %d\n", stats.Errors)
+	if stats.ExifWrites > 0 {
+		fmt.Printf("EXIF записан: %d\n", stats.ExifWrites)
+	}
+	if stats.ExifFailures > 0 {
+		fmt.Printf("Ошибок EXIF:  %d\n", stats.ExifFailures)
+	}
 	if stats.BytesCopied > 0 {
 		fmt.Printf("Байт:         %d\n", stats.BytesCopied)
 	}
@@ -377,6 +391,8 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 		Copied:          stats.Copied,
 		Skipped:         stats.Skipped,
 		Errors:          stats.Errors,
+		ExifWrites:      stats.ExifWrites,
+		ExifFailures:    stats.ExifFailures,
 		BytesCopied:     stats.BytesCopied,
 		ErrorList:       errorStrings(stats.ErrorList),
 		DuplicateGroups: dupGroups,

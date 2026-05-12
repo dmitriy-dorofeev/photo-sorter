@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"photo-sorter/internal/collision"
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
@@ -561,5 +563,150 @@ func TestCopy_CollisionCounterUpdatesTarget(t *testing.T) {
 	want := filepath.Join(dstDir, "a_1.jpg")
 	if entries[0].Target != want {
 		t.Errorf("Entry.Target = %q, want %q", entries[0].Target, want)
+	}
+}
+
+func TestCopy_WriteExif(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping exiftool integration test in short mode")
+	}
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not found in PATH")
+	}
+
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	// Копируем реальный JPEG из testdata
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "dateresolver", "minimal.jpg"))
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	os.WriteFile(srcFile, data, 0644)
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.WriteExif = true
+	c.ExifToolPath = "exiftool"
+
+	entries := []sorter.Entry{
+		{
+			Source:     scanner.FileInfo{Path: srcFile, Name: "a.jpg", Ext: ".jpg", Size: int64(len(data))},
+			Target:     filepath.Join(dstDir, "2024", "a.jpg"),
+			Date:       time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+			DateSource: dateresolver.SourceFilename,
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+	if stats.ExifWrites != 1 {
+		t.Errorf("expected 1 exif write, got %d", stats.ExifWrites)
+	}
+	if stats.ExifFailures != 0 {
+		t.Errorf("expected 0 exif failures, got %d", stats.ExifFailures)
+	}
+}
+
+func TestCopy_WriteExif_SkippedForExifSource(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping exiftool integration test in short mode")
+	}
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not found in PATH")
+	}
+
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "dateresolver", "minimal.jpg"))
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	os.WriteFile(srcFile, data, 0644)
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.WriteExif = true
+	c.ExifToolPath = "exiftool"
+
+	entries := []sorter.Entry{
+		{
+			Source:     scanner.FileInfo{Path: srcFile, Name: "a.jpg", Ext: ".jpg", Size: int64(len(data))},
+			Target:     filepath.Join(dstDir, "2024", "a.jpg"),
+			Date:       time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+			DateSource: dateresolver.SourceExif,
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.ExifWrites != 0 {
+		t.Errorf("expected 0 exif writes for SourceExif, got %d", stats.ExifWrites)
+	}
+}
+
+func TestCopy_WriteExif_UnsupportedExt(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.txt")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.WriteExif = true
+	c.ExifToolPath = "exiftool"
+
+	entries := []sorter.Entry{
+		{
+			Source:     scanner.FileInfo{Path: srcFile, Name: "a.txt", Ext: ".txt", Size: 5},
+			Target:     filepath.Join(dstDir, "2024", "a.txt"),
+			Date:       time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+			DateSource: dateresolver.SourceFilename,
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.ExifWrites != 0 {
+		t.Errorf("expected 0 exif writes for .txt, got %d", stats.ExifWrites)
+	}
+}
+
+func TestCopy_WriteExif_DryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "dateresolver", "minimal.jpg"))
+	if err != nil {
+		t.Fatalf("read testdata: %v", err)
+	}
+	os.WriteFile(srcFile, data, 0644)
+
+	c := New(true, dstDir, collision.StrategyCounter)
+	c.WriteExif = true
+	c.ExifToolPath = "exiftool"
+
+	entries := []sorter.Entry{
+		{
+			Source:     scanner.FileInfo{Path: srcFile, Name: "a.jpg", Ext: ".jpg", Size: int64(len(data))},
+			Target:     filepath.Join(dstDir, "2024", "a.jpg"),
+			Date:       time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+			DateSource: dateresolver.SourceFilename,
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.ExifWrites != 0 {
+		t.Errorf("expected 0 exif writes in dry-run, got %d", stats.ExifWrites)
 	}
 }

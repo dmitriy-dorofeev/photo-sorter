@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"photo-sorter/internal/collision"
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
 
@@ -23,6 +24,8 @@ type Stats struct {
 	Skipped           int
 	Errors            int
 	IntegrityFailures int
+	ExifWrites        int
+	ExifFailures      int
 	BytesCopied       int64
 	ErrorList         []error // до 10 первых ошибок для отчёта
 }
@@ -34,6 +37,8 @@ type Copier struct {
 	spaceFunc         func(string) (uint64, error)
 	hashFunc          func(context.Context, string) (uint64, error)
 	collisionStrategy collision.Strategy
+	WriteExif         bool
+	ExifToolPath      string
 }
 
 // New создаёт новый Copier.
@@ -168,6 +173,18 @@ func (c *Copier) Copy(
 			}
 			continue
 		}
+
+		// Обратная синхронизация: если дата взята из имени или mtime, записываем её в EXIF.
+		if c.WriteExif && !e.Skip && isWritableImage(e.Source.Ext) &&
+			(e.DateSource == dateresolver.SourceFilename || e.DateSource == dateresolver.SourceModTime) {
+			if err := writeExifDate(ctx, c.ExifToolPath, target, e.Date); err != nil {
+				stats.ExifFailures++
+				c.recordError(&stats, fmt.Errorf("exif write failed for %s: %w", target, err))
+			} else {
+				stats.ExifWrites++
+			}
+		}
+
 		stats.Copied++
 		stats.BytesCopied += e.Source.Size
 		consecutiveErrors = 0
