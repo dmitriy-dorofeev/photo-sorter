@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 4 {
-		t.Errorf("expected 4 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 5 {
+		t.Errorf("expected 5 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)

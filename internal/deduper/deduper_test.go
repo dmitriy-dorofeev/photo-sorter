@@ -158,7 +158,7 @@ func TestFindDuplicates(t *testing.T) {
 			if tt.name == "live photos disabled treats as duplicates" {
 				livePhotos = false
 			}
-			d := New(tt.files, livePhotos)
+			d := New(tt.files, livePhotos, StrategyPath, nil)
 			got, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
@@ -189,7 +189,7 @@ func TestFindDuplicates_HashError(t *testing.T) {
 		{Path: noRead, Name: "secret.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true)
+	d := New(files, true, StrategyPath, nil)
 	results, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -212,7 +212,7 @@ func TestFindDuplicates_NamedPipe(t *testing.T) {
 		{Path: pipePath, Name: "pipe.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true)
+	d := New(files, true, StrategyPath, nil)
 	results, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -237,7 +237,7 @@ func BenchmarkFindDuplicates(b *testing.B) {
 			Size: int64(len(content)),
 		})
 	}
-	d := New(files, true)
+	d := New(files, true, StrategyPath, nil)
 	ctx := context.Background()
 
 	b.ResetTimer()

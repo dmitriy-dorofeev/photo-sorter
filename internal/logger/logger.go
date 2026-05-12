@@ -39,3 +39,9 @@ func (l *Logger) Log(msg string) error {
 	_, err := fmt.Fprintf(l.file, "[%s] %s\n", timestamp, msg)
 	return err
 }
+
+// LogDuplicate записывает информацию о пропущенном дубликате.
+func (l *Logger) LogDuplicate(original, duplicate string, strategy string) error {
+	msg := fmt.Sprintf("DUPLICATE: kept %s (strategy=%s), skipped %s (same hash)", original, strategy, duplicate)
+	return l.Log(msg)
+}

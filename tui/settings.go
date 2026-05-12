@@ -70,21 +70,25 @@ type settingType int
 const (
 	settingTypeText settingType = iota
 	settingTypeBool
+	settingTypeChoice
 )
 
 type setting struct {
-	label       string
-	key         string
-	help        string
-	stringValue string
-	boolValue   bool
-	stype       settingType
+	label        string
+	key          string
+	help         string
+	stringValue  string
+	boolValue    bool
+	stype        settingType
+	choices      []string
+	choiceValues []string
+	choiceIdx    int
 }
 
 // AsString возвращает строковое значение настройки.
-// Если тип не settingTypeText, возвращает пустую строку.
+// Если тип не settingTypeText и не settingTypeChoice, возвращает пустую строку.
 func (s setting) AsString() string {
-	if s.stype != settingTypeText {
+	if s.stype != settingTypeText && s.stype != settingTypeChoice {
 		return ""
 	}
 	return s.stringValue
@@ -146,6 +150,16 @@ func newSettingsModel() settingsModel {
 				help:      "Если нет EXIF/имени, использовать ModTime файла",
 				boolValue: config.DefaultUseMTime,
 				stype:     settingTypeBool,
+			},
+			{
+				label:        "Стратегия дедупликации",
+				key:          "dup_strategy",
+				help:         "Какой файл считать оригиналом при обнаружении дубликатов",
+				stype:        settingTypeChoice,
+				choices:      []string{"По имени файла", "По размеру", "По дате изменения", "По метаданным"},
+				choiceValues: []string{"path", "largest", "newest", "best-meta"},
+				choiceIdx:    0,
+				stringValue:  "path",
 			},
 		},
 		input: ti,
@@ -283,6 +297,13 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 				idx, _ := findPreset(item.stringValue)
 				m.settings.templateCursor = idx
 				return m, nil
+			case settingTypeChoice:
+				item.choiceIdx++
+				if item.choiceIdx >= len(item.choices) {
+					item.choiceIdx = 0
+				}
+				item.stringValue = item.choiceValues[item.choiceIdx]
+				return m, nil
 			default:
 				return m, nil
 			}
@@ -346,6 +367,8 @@ func (m Model) viewSettings() string {
 			} else {
 				valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
 			}
+		case settingTypeChoice:
+			valueStr = highlightStyle.Render(item.choices[item.choiceIdx])
 		default:
 		}
 
@@ -413,7 +436,7 @@ func (m Model) GetSettingBool(key string) bool {
 // GetSettingString возвращает значение текстовой настройки по ключу.
 func (m Model) GetSettingString(key string) string {
 	for _, s := range m.settings.items {
-		if s.key == key && s.stype == settingTypeText {
+		if s.key == key && (s.stype == settingTypeText || s.stype == settingTypeChoice) {
 			return s.stringValue
 		}
 	}

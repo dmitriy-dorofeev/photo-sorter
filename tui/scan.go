@@ -103,6 +103,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		LivePhotos:   m.GetSettingBool("live_photos"),
 		IncludeVideo: m.GetSettingBool("include_video"),
 		UseMTime:     m.GetSettingBool("use_mtime"),
+		DupStrategy:  m.GetSettingString("dup_strategy"),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

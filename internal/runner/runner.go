@@ -22,6 +22,7 @@ type Config struct {
 	LivePhotos   bool     // группировать Live Photos
 	IncludeVideo bool     // включать видео
 	UseMTime     bool     // fallback на дату изменения файла
+	DupStrategy  string   // стратегия выбора оригинала из дубликатов
 }
 
 // Result содержит результаты этапов pipeline.
@@ -85,8 +86,23 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		progress("scan", len(files), len(files))
 	}
 
-	// 2. Dedup
-	d := deduper.New(files, cfg.LivePhotos)
+	// 2. Date resolve (batch для видео) + собираем источники дат.
+	dr := dateresolver.New()
+	dr.UseModTime = cfg.UseMTime
+	dr.ResolveBatch(ctx, files)
+
+	dateSources := make(map[string]dateresolver.Source, len(files))
+	for _, f := range files {
+		_, _, src := dr.ResolveWithSource(ctx, f)
+		dateSources[f.Path] = src
+	}
+
+	// 3. Dedup
+	strategy := deduper.Strategy(cfg.DupStrategy)
+	if strategy == "" {
+		strategy = deduper.StrategyPath
+	}
+	d := deduper.New(files, cfg.LivePhotos, strategy, dateSources)
 	res.Duplicates, err = d.FindDuplicates(ctx)
 	if err != nil {
 		return res, fmt.Errorf("dedup: %w", err)
@@ -95,10 +111,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		progress("dedup", len(res.Duplicates), len(res.Duplicates))
 	}
 
-	// 3. Date resolve + Sort
-	dr := dateresolver.New()
-	dr.UseModTime = cfg.UseMTime
-	dr.ResolveBatch(ctx, files) // batch-вызов exiftool для всех видео
+	// 4. Sort
 	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos)
 	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
 	if progress != nil {

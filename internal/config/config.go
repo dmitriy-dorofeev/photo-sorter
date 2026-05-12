@@ -14,4 +14,7 @@ const (
 
 	// DefaultUseMTime — использовать дату изменения как fallback по умолчанию.
 	DefaultUseMTime = true
+
+	// DefaultDupStrategy — стратегия выбора оригинала из группы дубликатов.
+	DefaultDupStrategy = "path"
 )

@@ -5,9 +5,9 @@ package deduper
 import (
 	"context"
 	"path/filepath"
-	"sort"
 	"strings"
 
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 )
@@ -20,14 +20,18 @@ type Result struct {
 
 // Deduper ищет дублирующиеся файлы.
 type Deduper struct {
-	files      []scanner.FileInfo
-	livePhotos bool
+	files       []scanner.FileInfo
+	livePhotos  bool
+	strategy    Strategy
+	dateSources map[string]dateresolver.Source
 }
 
 // New создаёт новый Deduper.
 // livePhotos: если true, пары Live Photos (.HEIC + .MOV с одним basename) не считаются дубликатами.
-func New(files []scanner.FileInfo, livePhotos bool) *Deduper {
-	return &Deduper{files: files, livePhotos: livePhotos}
+// strategy: стратегия выбора оригинала из группы дубликатов.
+// dateSources: мапа путь → источник даты (используется для стратегии best-meta).
+func New(files []scanner.FileInfo, livePhotos bool, strategy Strategy, dateSources map[string]dateresolver.Source) *Deduper {
+	return &Deduper{files: files, livePhotos: livePhotos, strategy: strategy, dateSources: dateSources}
 }
 
 // FindDuplicates возвращает список групп дубликатов.
@@ -88,16 +92,19 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 				continue
 			}
 
-			// Детерминированный выбор оригинала (по пути) — избегаем случайности map-итерации.
-			sort.Slice(hashGroup, func(i, j int) bool {
-				return hashGroup[i].info.Path < hashGroup[j].info.Path
-			})
+			infos := make([]scanner.FileInfo, len(hashGroup))
+			for i, fh := range hashGroup {
+				infos[i] = fh.info
+			}
 
-			original := hashGroup[0].info
+			original := PickOriginal(infos, d.strategy, d.dateSources)
 			var duplicates []scanner.FileInfo
 
-			for i := 1; i < len(hashGroup); i++ {
-				candidate := hashGroup[i].info
+			for _, fh := range hashGroup {
+				candidate := fh.info
+				if candidate.Path == original.Path {
+					continue
+				}
 				if d.livePhotos && isLivePhotoPair(original, candidate) {
 					continue
 				}

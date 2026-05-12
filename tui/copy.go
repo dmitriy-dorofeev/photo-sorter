@@ -138,6 +138,12 @@ func (m Model) logCopyResult() Model {
 	for _, e := range m.copy.stats.ErrorList {
 		l.Log(fmt.Sprintf("Error detail: %s", e.Error()))
 	}
+	strategy := m.GetSettingString("dup_strategy")
+	for _, dupGroup := range m.duplicates {
+		for _, dup := range dupGroup.Duplicates {
+			_ = l.LogDuplicate(dupGroup.Original.Path, dup.Path, strategy)
+		}
+	}
 	if m.copy.errMsg != "" {
 		l.Log(fmt.Sprintf("Fatal error: %s", m.copy.errMsg))
 	}

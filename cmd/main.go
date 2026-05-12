@@ -67,6 +67,7 @@ func main() {
 		includeVideo bool
 		dryRun       bool
 		useMTime     bool
+		dupStrategy  string
 		format       string
 		useTUI       bool
 		versionFlag  bool
@@ -80,6 +81,7 @@ func main() {
 	flag.BoolVar(&includeVideo, "include-video", config.DefaultIncludeVideo, "Обрабатывать видео")
 	flag.BoolVar(&dryRun, "dry-run", true, "Пробный прогон без копирования")
 	flag.BoolVar(&useMTime, "use-mtime", config.DefaultUseMTime, "Fallback на дату изменения файла")
+	flag.StringVar(&dupStrategy, "dup-strategy", config.DefaultDupStrategy, "Стратегия дедупликации: path | largest | newest | best-meta")
 	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
@@ -102,6 +104,7 @@ func main() {
   --include-video      Обрабатывать видео (default: true)
   --dry-run            Пробный прогон (default: true)
   --use-mtime          Fallback на дату изменения (default: true)
+  --dup-strategy       Стратегия дедупликации: path | largest | newest | best-meta (default: path)
 
 Вывод:
   --format string      Формат отчёта: text | json (default: "text")
@@ -137,6 +140,7 @@ func main() {
 		LivePhotos:   livePhotos,
 		IncludeVideo: includeVideo,
 		UseMTime:     useMTime,
+		DupStrategy:  dupStrategy,
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
@@ -188,6 +192,10 @@ func validateInputs(cfg runner.Config, format string) error {
 
 	if format != "text" && format != "json" {
 		return fmt.Errorf("ошибка: формат должен быть 'text' или 'json'")
+	}
+
+	if cfg.DupStrategy != "path" && cfg.DupStrategy != "largest" && cfg.DupStrategy != "newest" && cfg.DupStrategy != "best-meta" {
+		return fmt.Errorf("ошибка: стратегия дедупликации должна быть одной из: path, largest, newest, best-meta")
 	}
 
 	for _, src := range cfg.Sources {
