@@ -123,3 +123,48 @@ func TestRun_Progress(t *testing.T) {
 		t.Errorf("unexpected stages: %v", stages)
 	}
 }
+
+func TestRun_DupStrategies(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
+
+	strategies := []string{"path", "largest", "newest", "best-meta"}
+	for _, s := range strategies {
+		t.Run(s, func(t *testing.T) {
+			targetDir := t.TempDir()
+			cfg := Config{
+				Sources:      []string{sourceDir},
+				Target:       targetDir,
+				Template:     "2006/01/02",
+				LivePhotos:   true,
+				IncludeVideo: true,
+				UseMTime:     false,
+				DupStrategy:  s,
+			}
+
+			res, err := Run(context.Background(), cfg, nil)
+			if err != nil {
+				t.Fatalf("Run failed with strategy=%s: %v", s, err)
+			}
+			if len(res.Files) != 12 {
+				t.Errorf("expected 12 files, got %d", len(res.Files))
+			}
+
+			var dupCount int
+			for _, g := range res.Duplicates {
+				dupCount += len(g.Duplicates)
+			}
+			if dupCount < 5 {
+				t.Errorf("expected at least 5 duplicates, got %d", dupCount)
+			}
+
+			// Убеждаемся, что live_photo файлы не помечены как дубликаты друг друга
+			for _, g := range res.Duplicates {
+				for _, d := range g.Duplicates {
+					if strings.Contains(d.Name, "live_photo") {
+						t.Errorf("live_photo file marked as duplicate: %s", d.Name)
+					}
+				}
+			}
+		})
+	}
+}

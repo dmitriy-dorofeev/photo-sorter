@@ -221,6 +221,89 @@ func TestResolve_Priority(t *testing.T) {
 	})
 }
 
+// TestResolveWithSource_Priority проверяет, что ResolveWithSource возвращает
+// корректный Source в зависимости от источника даты.
+func TestResolveWithSource_Priority(t *testing.T) {
+	loc := time.Local
+
+	t.Run("EXIF returns SourceExif", func(t *testing.T) {
+		path := "../../testdata/dateresolver/minimal.jpg"
+		r := New()
+		f := scanner.FileInfo{
+			Path: path,
+			Name: "minimal.jpg",
+			Ext:  ".jpg",
+		}
+		_, ok, src := r.ResolveWithSource(context.Background(), f)
+		if !ok {
+			t.Fatal("expected ok=true for EXIF file")
+		}
+		if src != SourceExif {
+			t.Errorf("expected SourceExif, got %v", src)
+		}
+	})
+
+	t.Run("filename returns SourceFilename", func(t *testing.T) {
+		tmp := t.TempDir()
+		path := filepath.Join(tmp, "IMG_20240315_143022.jpg")
+		// Псевдо-JPEG без валидного EXIF
+		if err := os.WriteFile(path, []byte{0xFF, 0xD8, 0xFF, 0xD9}, 0644); err != nil {
+			t.Fatal(err)
+		}
+		r := New()
+		f := scanner.FileInfo{
+			Path:    path,
+			Name:    "IMG_20240315_143022.jpg",
+			ModTime: time.Date(2023, 1, 1, 0, 0, 0, 0, loc),
+			Ext:     ".jpg",
+		}
+		_, ok, src := r.ResolveWithSource(context.Background(), f)
+		if !ok {
+			t.Fatal("expected ok=true for filename-parseable file")
+		}
+		if src != SourceFilename {
+			t.Errorf("expected SourceFilename, got %v", src)
+		}
+	})
+
+	t.Run("ModTime fallback returns SourceModTime", func(t *testing.T) {
+		r := New()
+		r.UseModTime = true
+		fallback := time.Date(2023, 1, 1, 0, 0, 0, 0, loc)
+		f := scanner.FileInfo{
+			Path:    "/tmp/unknown.jpg",
+			Name:    "unknown.jpg",
+			ModTime: fallback,
+			Ext:     ".jpg",
+		}
+		_, ok, src := r.ResolveWithSource(context.Background(), f)
+		if !ok {
+			t.Fatal("expected ok=true for mtime fallback")
+		}
+		if src != SourceModTime {
+			t.Errorf("expected SourceModTime, got %v", src)
+		}
+	})
+
+	t.Run("none returns SourceNone", func(t *testing.T) {
+		r := New()
+		r.UseModTime = false
+		f := scanner.FileInfo{
+			Path:    "/tmp/unknown.jpg",
+			Name:    "unknown.jpg",
+			ModTime: time.Date(2023, 1, 1, 0, 0, 0, 0, loc),
+			Ext:     ".jpg",
+		}
+		_, ok, src := r.ResolveWithSource(context.Background(), f)
+		if ok {
+			t.Fatal("expected ok=false when no date source available")
+		}
+		if src != SourceNone {
+			t.Errorf("expected SourceNone, got %v", src)
+		}
+	})
+}
+
 // TestExtractVideoDate_CommandInjection проверяет, что файл с именем,
 // начинающимся на "-", не интерпретируется как флаг exiftool.
 func TestExtractVideoDate_CommandInjection(t *testing.T) {

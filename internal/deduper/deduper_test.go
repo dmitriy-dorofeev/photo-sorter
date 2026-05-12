@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 
@@ -220,6 +221,70 @@ func TestFindDuplicates_NamedPipe(t *testing.T) {
 	// Non-regular файл исключается из дедупликации — остаётся один файл в группе.
 	if len(results) != 0 {
 		t.Errorf("expected 0 duplicates, got %d", len(results))
+	}
+}
+
+func TestFindDuplicates_Strategies(t *testing.T) {
+	files := []scanner.FileInfo{
+		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
+		{Path: testdata("dup_b.bin"), Name: "dup_b.bin", Size: 100},
+	}
+
+	tests := []struct {
+		name        string
+		strategy    Strategy
+		dateSources map[string]dateresolver.Source
+		wantOrig    string
+	}{
+		{
+			name:     "path strategy picks alphabetical",
+			strategy: StrategyPath,
+			wantOrig: "dup_a.bin",
+		},
+		{
+			name:     "largest strategy falls back to path when sizes equal",
+			strategy: StrategyLargest,
+			wantOrig: "dup_a.bin",
+		},
+		{
+			name:     "newest strategy falls back to path when times equal",
+			strategy: StrategyNewest,
+			wantOrig: "dup_a.bin",
+		},
+		{
+			name:     "best-meta picks higher source",
+			strategy: StrategyBestMeta,
+			dateSources: map[string]dateresolver.Source{
+				testdata("dup_a.bin"): dateresolver.SourceExif,
+				testdata("dup_b.bin"): dateresolver.SourceFilename,
+			},
+			wantOrig: "dup_a.bin",
+		},
+		{
+			name:        "best-meta with nil map falls back to largest then path",
+			strategy:    StrategyBestMeta,
+			dateSources: nil,
+			wantOrig:    "dup_a.bin",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := New(files, true, tt.strategy, tt.dateSources)
+			results, err := d.FindDuplicates(context.Background())
+			if err != nil {
+				t.Fatalf("FindDuplicates() error = %v", err)
+			}
+			if len(results) != 1 {
+				t.Fatalf("expected 1 result, got %d", len(results))
+			}
+			if results[0].Original.Name != tt.wantOrig {
+				t.Errorf("expected original %s, got %s", tt.wantOrig, results[0].Original.Name)
+			}
+			if len(results[0].Duplicates) != 1 {
+				t.Errorf("expected 1 duplicate, got %d", len(results[0].Duplicates))
+			}
+		})
 	}
 }
 

@@ -87,6 +87,30 @@ func TestLog_Concurrent(t *testing.T) {
 	}
 }
 
+func TestLogDuplicate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "dup.log")
+	l, err := New(path)
+	if err != nil {
+		t.Fatalf("new logger: %v", err)
+	}
+	if err := l.LogDuplicate("/src/original.jpg", "/src/copy.jpg", "largest"); err != nil {
+		t.Fatalf("log duplicate: %v", err)
+	}
+	if err := l.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	content := string(data)
+	want := "DUPLICATE: kept /src/original.jpg (strategy=largest), skipped /src/copy.jpg (same hash)"
+	if !strings.Contains(content, want) {
+		t.Errorf("expected log to contain %q, got:\n%s", want, content)
+	}
+}
+
 func TestLog_AfterClose(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "closed.log")
 	l, err := New(path)
