@@ -97,14 +97,15 @@ func (m Model) startScan() (Model, tea.Cmd) {
 	}
 
 	cfg := runner.Config{
-		Sources:          m.Sources,
-		Target:           m.Target,
-		Template:         m.GetSettingString("template"),
-		FileNameTemplate: m.GetSettingString("file_name_template"),
-		LivePhotos:       m.GetSettingBool("live_photos"),
-		IncludeVideo:     m.GetSettingBool("include_video"),
-		UseMTime:         m.GetSettingBool("use_mtime"),
-		DupStrategy:      m.GetSettingString("dup_strategy"),
+		Sources:           m.Sources,
+		Target:            m.Target,
+		Template:          m.GetSettingString("template"),
+		FileNameTemplate:  m.GetSettingString("file_name_template"),
+		LivePhotos:        m.GetSettingBool("live_photos"),
+		IncludeVideo:      m.GetSettingBool("include_video"),
+		UseMTime:          m.GetSettingBool("use_mtime"),
+		DupStrategy:       m.GetSettingString("dup_strategy"),
+		CollisionStrategy: m.GetSettingString("collision_strategy"),
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

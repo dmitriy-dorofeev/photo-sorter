@@ -47,6 +47,9 @@ photo-sorter/
 │   │   ├── device.go              # Эвристическое определение устройства по имени файла
 │   │   ├── renamer_test.go
 │   │   └── device_test.go
+│   ├── collision/
+│   │   ├── resolver.go            # Стратегии разрешения конфликтов имён: counter (_1, _2) и hash (_<short_hash>)
+│   │   └── resolver_test.go
 │   ├── sorter/
 │   │   ├── sorter.go              # Построение целевого дерева, генерация имён, разрешение коллизий
 │   │   └── sorter_test.go
@@ -134,6 +137,7 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 ./photo-sorter --source ./a --source ./b --target ./out --dry-run=false
 ./photo-sorter --source ./photos --target ./sorted --format=json
 ./photo-sorter --source ./photos --target ./sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
+./photo-sorter --source ./photos --target ./sorted --collision-strategy=hash --dry-run=false
 
 # Запуск тестов
 go test ./...
@@ -166,8 +170,8 @@ make snapshot
 1. **scanner** — параллельно обходит исходные папки (`filepath.WalkDir` + `errgroup`), фильтрует по расширениям, собирает `[]FileInfo`.
 2. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename).
 3. **dateresolver** — для каждого файла: EXIF (JPEG) → видео-метаданные (exiftool) → парсинг имени (8 паттернов) → `mtime` (если включено `UseModTime`) → `unsorted/`.
-4. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
-5. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), поддержка `context.Context` (отмена), progress callback.
+4. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
+5. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), поддержка `context.Context` (отмена), progress callback.
 6. **logger** — после копирования создаёт лог-файл `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` в целевой папке.
 7. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
@@ -226,7 +230,7 @@ go test ./internal/ -run TestCancellation -v
 
 - **Дубликаты** — двухуровневая проверка (размер → хеш), чтобы не хешировать все файлы.
 - **Live Photos** — `.HEIC` + `.MOV` с одинаковым basename не считаются дублями друг друга; `.MOV` без даты получает дату от соответствующего `.HEIC`.
-- **Коллизии имён** — если в целевой папке файл с таким именем уже есть, сравниваются хеши: совпадают → пропускаем, разные → суффикс `_1`, `_2`.
+- **Коллизии имён** — если в целевой папке файл с таким именем уже есть, сравниваются хеши: совпадают → пропускаем, разные → суффикс по выбранной стратегии (`counter`: `_1`, `_2`; `hash`: `_a3f7b2`). Стратегия задаётся флагом `--collision-strategy` или в TUI. При `hash` один и тот же исходный файл всегда получает одинаковый суффикс (идемпотентность).
 - **Файлы без даты** — помещаются в `unsorted/` в корне целевой папки. Никогда не теряются.
 - **Недостаточно места** — `copier` проверяет свободное место через `unix.Statfs` перед началом копирования.
 - **Отмена операции** — `copier.Copy` принимает `context.Context`, отмена работает на уровне TUI (клавиша `Esc` на экране копирования).

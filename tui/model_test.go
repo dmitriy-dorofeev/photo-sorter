@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 6 {
-		t.Errorf("expected 6 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 7 {
+		t.Errorf("expected 7 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -45,6 +45,12 @@ func TestNewModel(t *testing.T) {
 	}
 	if m.settings.items[2].AsBool() != config.DefaultLivePhotos {
 		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[2].AsBool())
+	}
+	if m.settings.items[6].key != "collision_strategy" {
+		t.Errorf("expected seventh setting key 'collision_strategy', got %s", m.settings.items[6].key)
+	}
+	if m.settings.items[6].AsString() != config.DefaultCollisionStrategy {
+		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[6].AsString())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")

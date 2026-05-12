@@ -131,6 +131,9 @@ func TestCLIHelp(t *testing.T) {
 	if !strings.Contains(output, "--dup-strategy") {
 		t.Error("help missing --dup-strategy flag")
 	}
+	if !strings.Contains(output, "--collision-strategy") {
+		t.Error("help missing --collision-strategy flag")
+	}
 }
 
 func TestCLIDryRun(t *testing.T) {
@@ -244,6 +247,26 @@ func TestCLIValidation_DupStrategy(t *testing.T) {
 	output := string(out)
 	if !strings.Contains(output, "стратегия дедупликации должна быть одной из") {
 		t.Errorf("expected error about invalid dup strategy, got:\n%s", output)
+	}
+}
+
+func TestCLIValidation_CollisionStrategy(t *testing.T) {
+	buildTestBinaries()
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cmd := exec.Command(cliBin,
+		"--source", sourceDir,
+		"--target", targetDir,
+		"--collision-strategy", "foo",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error, got success:\n%s", out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "стратегия конфликтов имён должна быть одной из") {
+		t.Errorf("expected error about invalid collision strategy, got:\n%s", output)
 	}
 }
 

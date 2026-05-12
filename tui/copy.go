@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/logger"
 
@@ -62,7 +63,8 @@ func (m Model) startCopy() (Model, tea.Cmd) {
 	dryRun := false
 
 	return m, func() tea.Msg {
-		c := copier.New(dryRun, m.Target)
+		strategy := collision.Strategy(m.GetSettingString("collision_strategy"))
+		c := copier.New(dryRun, m.Target, strategy)
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
 			m.copyProgress.Store(int64(cur))
 			m.copyTotal.Store(int64(tot))

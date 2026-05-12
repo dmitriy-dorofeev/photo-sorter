@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
 
@@ -28,16 +29,21 @@ type Stats struct {
 
 // Copier выполняет копирование файлов.
 type Copier struct {
-	dryRun     bool
-	targetRoot string
-	spaceFunc  func(string) (uint64, error)
-	hashFunc   func(context.Context, string) (uint64, error)
+	dryRun            bool
+	targetRoot        string
+	spaceFunc         func(string) (uint64, error)
+	hashFunc          func(context.Context, string) (uint64, error)
+	collisionStrategy collision.Strategy
 }
 
 // New создаёт новый Copier.
 // targetRoot используется для проверки свободного места.
-func New(dryRun bool, targetRoot string) *Copier {
-	return &Copier{dryRun: dryRun, targetRoot: targetRoot, spaceFunc: availableSpace, hashFunc: hasher.HashFile}
+// collisionStrategy может быть пустой — тогда используется counter.
+func New(dryRun bool, targetRoot string, collisionStrategy collision.Strategy) *Copier {
+	if collisionStrategy == "" {
+		collisionStrategy = collision.StrategyCounter
+	}
+	return &Copier{dryRun: dryRun, targetRoot: targetRoot, spaceFunc: availableSpace, hashFunc: hasher.HashFile, collisionStrategy: collisionStrategy}
 }
 
 // Copy выполняет копирование по плану сортировки.
@@ -58,7 +64,8 @@ func (c *Copier) Copy(
 		}
 	}
 
-	for i, e := range entries {
+	for i := range entries {
+		e := &entries[i]
 		if progress != nil {
 			progress(i, total)
 		}
@@ -130,7 +137,7 @@ func (c *Copier) Copy(
 					consecutiveErrors = 0
 					continue
 				}
-				newTarget, err := findFreeName(target)
+				newTarget, err := c.resolveCollision(target, e.Source.Path)
 				if err != nil {
 					stats.Errors++
 					c.recordError(&stats, err)
@@ -142,6 +149,8 @@ func (c *Copier) Copy(
 				target = newTarget
 			}
 		}
+
+		e.Target = target
 
 		if err := c.copyFile(ctx, e.Source.Path, target); err != nil {
 			if errors.Is(err, errSkipCollision) {
@@ -302,13 +311,10 @@ func validateTargetPath(targetRoot, target string) error {
 	return nil
 }
 
-func findFreeName(target string) (string, error) {
-	dir := filepath.Dir(target)
-	ext := filepath.Ext(target)
-	base := strings.TrimSuffix(filepath.Base(target), ext)
+func (c *Copier) resolveCollision(target, sourcePath string) (string, error) {
 	const maxIterations = 10000
-	for i := 1; i <= maxIterations; i++ {
-		candidate := filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+	for i := 0; i <= maxIterations; i++ {
+		candidate := collision.Resolve(target, c.collisionStrategy, sourcePath, i)
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
 			return candidate, nil
 		}

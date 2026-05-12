@@ -212,6 +212,16 @@ func newSettingsModel() settingsModel {
 				choiceIdx:    0,
 				stringValue:  "path",
 			},
+			{
+				label:        "Конфликты имён",
+				key:          "collision_strategy",
+				help:         "Как формировать суффикс, если имя уже занято",
+				stype:        settingTypeChoice,
+				choices:      []string{"Счётчик (_1, _2)", "Короткий хеш"},
+				choiceValues: []string{"counter", "hash"},
+				choiceIdx:    0,
+				stringValue:  "counter",
+			},
 		},
 		input: ti,
 	}

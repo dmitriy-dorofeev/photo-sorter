@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
@@ -24,7 +25,7 @@ func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.F
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolve)
 
 	unsortedCount := 0
@@ -162,7 +163,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 4. Build tree
-	sort := sorter.New(targetDir, "2006/01/02", true, nil)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
@@ -191,7 +192,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 5. Dry-run copy
-	c := copier.New(true, targetDir)
+	c := copier.New(true, targetDir, collision.StrategyCounter)
 	stats, err := c.Copy(context.Background(), entries, nil)
 	if err != nil {
 		t.Fatalf("dry-run copy failed: %v", err)
@@ -207,7 +208,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 6. Real copy
-	c2 := copier.New(false, targetDir)
+	c2 := copier.New(false, targetDir, collision.StrategyCounter)
 	stats2, err := c2.Copy(context.Background(), entries, nil)
 	if err != nil {
 		t.Fatalf("real copy failed: %v", err)
@@ -293,7 +294,7 @@ func TestEndToEnd_UseModTime(t *testing.T) {
 	}
 
 	// Copy and verify
-	c := copier.New(false, targetDir)
+	c := copier.New(false, targetDir, collision.StrategyCounter)
 	stats, err := c.Copy(context.Background(), entries, nil)
 	if err != nil {
 		t.Fatalf("copy failed: %v", err)
@@ -374,7 +375,7 @@ func TestEndToEnd_ExtendedPatterns(t *testing.T) {
 	}
 
 	// Copy and verify
-	c := copier.New(false, targetDir)
+	c := copier.New(false, targetDir, collision.StrategyCounter)
 	stats, err := c.Copy(context.Background(), entries, nil)
 	if err != nil {
 		t.Fatalf("copy failed: %v", err)
@@ -430,7 +431,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	if len(entries) != 1 {
@@ -443,7 +444,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 		t.Errorf("expected target in 2023/07/07, got %s", entries[0].Target)
 	}
 
-	c := copier.New(false, targetDir)
+	c := copier.New(false, targetDir, collision.StrategyCounter)
 	stats, err := c.Copy(context.Background(), entries, nil)
 	if err != nil {
 		t.Fatalf("copy failed: %v", err)
@@ -465,11 +466,11 @@ func TestCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	c := copier.New(false, targetDir)
+	c := copier.New(false, targetDir, collision.StrategyCounter)
 
 	// Cancel immediately
 	cancel()
@@ -517,7 +518,7 @@ func TestEndToEnd_FileNameTemplate(t *testing.T) {
 	}
 
 	// Копируем
-	c := copier.New(false, targetDir)
+	c := copier.New(false, targetDir, collision.StrategyCounter)
 	stats, err := c.Copy(context.Background(), res.Entries, nil)
 	if err != nil {
 		t.Fatalf("copy failed: %v", err)
@@ -600,5 +601,60 @@ func TestEndToEnd_FileNameTemplate_Unsorted(t *testing.T) {
 	base := filepath.Base(res.Entries[0].Target)
 	if !strings.HasPrefix(base, "0000-00-00_") {
 		t.Errorf("expected zero-date prefix, got %s", base)
+	}
+}
+
+func TestEndToEnd_CollisionStrategyHash(t *testing.T) {
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Два файла с одинаковым именем, разное содержимое
+	os.WriteFile(filepath.Join(sourceDir, "photo.jpg"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(sourceDir, "subdir", "photo.jpg"), []byte("b"), 0644)
+	os.MkdirAll(filepath.Join(sourceDir, "subdir"), 0755)
+	os.WriteFile(filepath.Join(sourceDir, "subdir", "photo.jpg"), []byte("b"), 0644)
+
+	cfg := runner.Config{
+		Sources:           []string{sourceDir},
+		Target:            targetDir,
+		Template:          "2006/01/02",
+		FileNameTemplate:  "{original}{ext}",
+		LivePhotos:        false,
+		IncludeVideo:      false,
+		UseMTime:          true,
+		CollisionStrategy: "hash",
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(res.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(res.Entries))
+	}
+
+	// Проверяем, что цели различаются и содержат hash-суффикс
+	if res.Entries[0].Target == res.Entries[1].Target {
+		t.Error("expected different targets for hash strategy")
+	}
+
+	c := copier.New(false, targetDir, collision.StrategyHash)
+	stats, err := c.Copy(context.Background(), res.Entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+	if stats.Copied != 2 {
+		t.Errorf("expected 2 copied, got %d", stats.Copied)
+	}
+
+	// Проверяем, что Entry.Target обновлён в соответствии с реальными путями
+	for _, e := range res.Entries {
+		if _, err := os.Stat(e.Target); os.IsNotExist(err) {
+			t.Errorf("file should exist at %s", e.Target)
+		}
 	}
 }

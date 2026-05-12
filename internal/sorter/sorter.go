@@ -3,11 +3,11 @@ package sorter
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
@@ -31,24 +31,30 @@ type Entry struct {
 
 // Sorter строит план сортировки.
 type Sorter struct {
-	targetRoot       string
-	layout           string // например, "2006/01/02"
-	livePhotos       bool
-	fileNameTemplate *renamer.Template
+	targetRoot        string
+	layout            string // например, "2006/01/02"
+	livePhotos        bool
+	fileNameTemplate  *renamer.Template
+	collisionStrategy collision.Strategy
 }
 
 // New создаёт новый Sorter.
 // livePhotos: если true, .MOV без даты получает дату от соответствующего .HEIC/.HEIF.
 // fileNameTemplate может быть nil — тогда используется {original}{ext}.
-func New(targetRoot, layout string, livePhotos bool, fileNameTemplate *renamer.Template) *Sorter {
+// collisionStrategy может быть пустой — тогда используется counter.
+func New(targetRoot, layout string, livePhotos bool, fileNameTemplate *renamer.Template, collisionStrategy collision.Strategy) *Sorter {
 	if fileNameTemplate == nil {
 		fileNameTemplate, _ = renamer.Parse("{original}{ext}")
 	}
+	if collisionStrategy == "" {
+		collisionStrategy = collision.StrategyCounter
+	}
 	return &Sorter{
-		targetRoot:       targetRoot,
-		layout:           layout,
-		livePhotos:       livePhotos,
-		fileNameTemplate: fileNameTemplate,
+		targetRoot:        targetRoot,
+		layout:            layout,
+		livePhotos:        livePhotos,
+		fileNameTemplate:  fileNameTemplate,
+		collisionStrategy: collisionStrategy,
 	}
 }
 
@@ -134,11 +140,8 @@ func (s *Sorter) BuildTree(
 
 		// Разрешение внутренних коллизий.
 		if _, exists := targetCounts[target]; exists {
-			dir := filepath.Dir(target)
-			ext := filepath.Ext(target)
-			base := strings.TrimSuffix(filepath.Base(target), ext)
-			for i := 1; ; i++ {
-				candidate := filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, i, ext))
+			for i := 0; ; i++ {
+				candidate := collision.Resolve(target, s.collisionStrategy, f.Path, i)
 				if _, taken := targetCounts[candidate]; !taken {
 					target = candidate
 					break

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/renamer"
@@ -17,14 +18,15 @@ import (
 
 // Config описывает параметры запуска pipeline.
 type Config struct {
-	Sources          []string // исходные папки
-	Target           string   // целевая папка
-	Template         string   // шаблон папок (Go time layout)
-	FileNameTemplate string   // шаблон имён файлов
-	LivePhotos       bool     // группировать Live Photos
-	IncludeVideo     bool     // включать видео
-	UseMTime         bool     // fallback на дату изменения файла
-	DupStrategy      string   // стратегия выбора оригинала из дубликатов
+	Sources           []string // исходные папки
+	Target            string   // целевая папка
+	Template          string   // шаблон папок (Go time layout)
+	FileNameTemplate  string   // шаблон имён файлов
+	LivePhotos        bool     // группировать Live Photos
+	IncludeVideo      bool     // включать видео
+	UseMTime          bool     // fallback на дату изменения файла
+	DupStrategy       string   // стратегия выбора оригинала из дубликатов
+	CollisionStrategy string   // стратегия разрешения конфликтов имён
 }
 
 // Result содержит результаты этапов pipeline.
@@ -126,7 +128,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	}
 
 	// 4. Sort
-	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl)
+	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl, collision.Strategy(cfg.CollisionStrategy))
 	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
 	if progress != nil {
 		progress("sort", len(res.Entries), len(res.Entries))

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
@@ -18,7 +19,7 @@ import (
 
 func TestCopy_DryRun(t *testing.T) {
 	dir := t.TempDir()
-	c := New(true, dir)
+	c := New(true, dir, collision.StrategyCounter)
 
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: "/src/a.jpg", Name: "a.jpg"}, Target: filepath.Join(dir, "a.jpg")},
@@ -42,7 +43,7 @@ func TestCopy_Basic(t *testing.T) {
 	srcFile := filepath.Join(srcDir, "a.jpg")
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "2024", "a.jpg")},
 	}
@@ -73,7 +74,7 @@ func TestCopy_SkipDuplicate(t *testing.T) {
 	os.WriteFile(srcFile, []byte("dup"), 0644)
 	os.WriteFile(filepath.Join(dstDir, "a.jpg"), []byte("dup"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 3}, Target: filepath.Join(dstDir, "a.jpg")},
 	}
@@ -94,7 +95,7 @@ func TestCopy_CollisionDifferent(t *testing.T) {
 	os.WriteFile(srcFile, []byte("new"), 0644)
 	os.WriteFile(filepath.Join(dstDir, "a.jpg"), []byte("old"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 3}, Target: filepath.Join(dstDir, "a.jpg")},
 	}
@@ -118,7 +119,7 @@ func TestCopy_ContextCancel(t *testing.T) {
 		os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644)
 	}
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	var entries []sorter.Entry
 	for i := 0; i < 5; i++ {
 		entries = append(entries, sorter.Entry{
@@ -142,7 +143,7 @@ func TestCopy_Progress(t *testing.T) {
 	dstDir := t.TempDir()
 	os.WriteFile(filepath.Join(srcDir, "a.jpg"), []byte("x"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.jpg"), Name: "a.jpg", Size: 1}, Target: filepath.Join(dstDir, "a.jpg")},
 	}
@@ -166,7 +167,7 @@ func TestCopy_ErrorList(t *testing.T) {
 	srcDir := t.TempDir()
 	dstDir := t.TempDir()
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	// Три записи с несуществующими исходными файлами.
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "missing1.jpg"), Name: "missing1.jpg", Size: 1}, Target: filepath.Join(dstDir, "missing1.jpg")},
@@ -194,7 +195,7 @@ func TestCopy_AbortOnMissingTarget(t *testing.T) {
 	os.WriteFile(filepath.Join(srcDir, "b.jpg"), []byte("y"), 0644)
 	os.WriteFile(filepath.Join(srcDir, "c.jpg"), []byte("z"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.jpg"), Name: "a.jpg", Size: 1}, Target: filepath.Join(dstDir, "a.jpg")},
 		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "b.jpg"), Name: "b.jpg", Size: 1}, Target: filepath.Join(dstDir, "b.jpg")},
@@ -220,7 +221,7 @@ func TestCopy_PathTraversal(t *testing.T) {
 	dstDir := t.TempDir()
 	os.WriteFile(filepath.Join(srcDir, "a.jpg"), []byte("x"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.jpg"), Name: "a.jpg", Size: 1}, Target: filepath.Join(dstDir, "..", "outside.jpg")},
 	}
@@ -256,7 +257,7 @@ func TestCopy_SymlinkAttack(t *testing.T) {
 		t.Skipf("cannot create symlink: %v", err)
 	}
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 11}, Target: symlink},
 	}
@@ -301,7 +302,7 @@ func TestCopy_NotEnoughDiskSpace(t *testing.T) {
 	srcFile := filepath.Join(srcDir, "a.jpg")
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
-	c := &Copier{dryRun: false, targetRoot: dstDir, spaceFunc: func(string) (uint64, error) {
+	c := &Copier{dryRun: false, targetRoot: dstDir, collisionStrategy: collision.StrategyCounter, spaceFunc: func(string) (uint64, error) {
 		return 1, nil // 1 байт свободно, нужно 5
 	}, hashFunc: hasher.HashFile}
 	entries := []sorter.Entry{
@@ -327,7 +328,7 @@ func TestCopy_ContextCancelMidway(t *testing.T) {
 		os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644)
 	}
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	var entries []sorter.Entry
 	for i := 0; i < 3; i++ {
 		entries = append(entries, sorter.Entry{
@@ -357,7 +358,7 @@ func TestCopy_IntegrityCheck_Success(t *testing.T) {
 	srcFile := filepath.Join(srcDir, "a.jpg")
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
-	c := New(false, dstDir)
+	c := New(false, dstDir, collision.StrategyCounter)
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
 	}
@@ -384,9 +385,10 @@ func TestCopy_IntegrityCheck_Failure(t *testing.T) {
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
 	c := &Copier{
-		dryRun:     false,
-		targetRoot: dstDir,
-		spaceFunc:  availableSpace,
+		dryRun:            false,
+		targetRoot:        dstDir,
+		collisionStrategy: collision.StrategyCounter,
+		spaceFunc:         availableSpace,
 		hashFunc: func(ctx context.Context, path string) (uint64, error) {
 			if strings.Contains(path, dstDir) {
 				return 0xBAD, nil
@@ -420,9 +422,10 @@ func TestCopy_IntegrityCheck_HashError(t *testing.T) {
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
 	c := &Copier{
-		dryRun:     false,
-		targetRoot: dstDir,
-		spaceFunc:  availableSpace,
+		dryRun:            false,
+		targetRoot:        dstDir,
+		collisionStrategy: collision.StrategyCounter,
+		spaceFunc:         availableSpace,
 		hashFunc: func(ctx context.Context, path string) (uint64, error) {
 			if strings.Contains(path, dstDir) {
 				return 0, errors.New("disk io error")
@@ -456,9 +459,10 @@ func TestCopy_IntegrityCheck_DryRun(t *testing.T) {
 	os.WriteFile(srcFile, []byte("hello"), 0644)
 
 	c := &Copier{
-		dryRun:     true,
-		targetRoot: dstDir,
-		spaceFunc:  availableSpace,
+		dryRun:            true,
+		targetRoot:        dstDir,
+		collisionStrategy: collision.StrategyCounter,
+		spaceFunc:         availableSpace,
 		hashFunc: func(ctx context.Context, path string) (uint64, error) {
 			return 0, errors.New("should not be called")
 		},
@@ -479,5 +483,83 @@ func TestCopy_IntegrityCheck_DryRun(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "a.jpg")); !os.IsNotExist(err) {
 		t.Error("dry-run should not create files")
+	}
+}
+
+func TestCopy_CollisionHashOnDisk(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("new content"), 0644)
+	os.WriteFile(filepath.Join(dstDir, "a.jpg"), []byte("old content"), 0644)
+
+	c := New(false, dstDir, collision.StrategyHash)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 11}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+	// Проверяем, что имя изменилось на hash-суффикс
+	if entries[0].Target == filepath.Join(dstDir, "a.jpg") {
+		t.Error("Entry.Target should be updated after hash collision resolution")
+	}
+	if _, err := os.Stat(entries[0].Target); err != nil {
+		t.Errorf("expected file to exist at %s: %v", entries[0].Target, err)
+	}
+}
+
+func TestCopy_CollisionHashSameContent(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("same"), 0644)
+	os.WriteFile(filepath.Join(dstDir, "a.jpg"), []byte("same"), 0644)
+
+	c := New(false, dstDir, collision.StrategyHash)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 4}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Skipped != 1 {
+		t.Errorf("expected 1 skipped (same content), got %d", stats.Skipped)
+	}
+	// Entry.Target не должен меняться, т.к. файл не копировался
+	if entries[0].Target != filepath.Join(dstDir, "a.jpg") {
+		t.Errorf("Entry.Target should stay original when skipped: got %q", entries[0].Target)
+	}
+}
+
+func TestCopy_CollisionCounterUpdatesTarget(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("new"), 0644)
+	os.WriteFile(filepath.Join(dstDir, "a.jpg"), []byte("old"), 0644)
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 3}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+	want := filepath.Join(dstDir, "a_1.jpg")
+	if entries[0].Target != want {
+		t.Errorf("Entry.Target = %q, want %q", entries[0].Target, want)
 	}
 }

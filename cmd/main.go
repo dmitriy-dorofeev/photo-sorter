@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/runner"
@@ -60,19 +61,20 @@ func main() {
 	}
 
 	var (
-		sources          stringSlice
-		target           string
-		template         string
-		fileNameTemplate string
-		livePhotos       bool
-		includeVideo     bool
-		dryRun           bool
-		useMTime         bool
-		dupStrategy      string
-		format           string
-		useTUI           bool
-		versionFlag      bool
-		checkUpdate      bool
+		sources           stringSlice
+		target            string
+		template          string
+		fileNameTemplate  string
+		livePhotos        bool
+		includeVideo      bool
+		dryRun            bool
+		useMTime          bool
+		dupStrategy       string
+		collisionStrategy string
+		format            string
+		useTUI            bool
+		versionFlag       bool
+		checkUpdate       bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -84,6 +86,7 @@ func main() {
 	flag.BoolVar(&dryRun, "dry-run", true, "Пробный прогон без копирования")
 	flag.BoolVar(&useMTime, "use-mtime", config.DefaultUseMTime, "Fallback на дату изменения файла")
 	flag.StringVar(&dupStrategy, "dup-strategy", config.DefaultDupStrategy, "Стратегия дедупликации: path | largest | newest | best-meta")
+	flag.StringVar(&collisionStrategy, "collision-strategy", config.DefaultCollisionStrategy, "Стратегия конфликтов имён: counter | hash")
 	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
@@ -108,6 +111,7 @@ func main() {
   --dry-run            Пробный прогон (default: true)
   --use-mtime          Fallback на дату изменения (default: true)
   --dup-strategy       Стратегия дедупликации: path | largest | newest | best-meta (default: path)
+  --collision-strategy Стратегия конфликтов имён: counter | hash (default: counter)
 
 Вывод:
   --format string      Формат отчёта: text | json (default: "text")
@@ -138,14 +142,15 @@ func main() {
 	}
 
 	cfg := runner.Config{
-		Sources:          sources,
-		Target:           target,
-		Template:         template,
-		FileNameTemplate: fileNameTemplate,
-		LivePhotos:       livePhotos,
-		IncludeVideo:     includeVideo,
-		UseMTime:         useMTime,
-		DupStrategy:      dupStrategy,
+		Sources:           sources,
+		Target:            target,
+		Template:          template,
+		FileNameTemplate:  fileNameTemplate,
+		LivePhotos:        livePhotos,
+		IncludeVideo:      includeVideo,
+		UseMTime:          useMTime,
+		DupStrategy:       dupStrategy,
+		CollisionStrategy: collisionStrategy,
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
@@ -203,6 +208,10 @@ func validateInputs(cfg runner.Config, format string) error {
 		return fmt.Errorf("ошибка: стратегия дедупликации должна быть одной из: path, largest, newest, best-meta")
 	}
 
+	if cfg.CollisionStrategy != "counter" && cfg.CollisionStrategy != "hash" {
+		return fmt.Errorf("ошибка: стратегия конфликтов имён должна быть одной из: counter, hash")
+	}
+
 	for _, src := range cfg.Sources {
 		info, err := os.Stat(src)
 		if err != nil {
@@ -252,7 +261,7 @@ func runCLI(cfg runner.Config, dryRun bool, format string) error {
 		return err
 	}
 
-	c := copier.New(dryRun, cfg.Target)
+	c := copier.New(dryRun, cfg.Target, collision.Strategy(cfg.CollisionStrategy))
 	stats, err := c.Copy(ctx, res.Entries, nil)
 	if err != nil {
 		// Выводим частичную статистику перед возвратом ошибки

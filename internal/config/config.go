@@ -20,4 +20,7 @@ const (
 
 	// DefaultDupStrategy — стратегия выбора оригинала из группы дубликатов.
 	DefaultDupStrategy = "path"
+
+	// DefaultCollisionStrategy — стратегия разрешения конфликтов имён.
+	DefaultCollisionStrategy = "counter"
 )

@@ -3,9 +3,11 @@ package sorter
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"photo-sorter/internal/collision"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
@@ -16,7 +18,7 @@ func date(year, month, day int) time.Time {
 }
 
 func TestBuildTree_Basic(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil)
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
@@ -36,7 +38,7 @@ func TestBuildTree_Basic(t *testing.T) {
 }
 
 func TestBuildTree_Unsorted(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil)
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.bin", Name: "unknown.bin", Ext: ".bin"},
 	}
@@ -53,7 +55,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 }
 
 func TestBuildTree_SkipDuplicates(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil)
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/original.jpg", Name: "original.jpg"},
 		{Path: "/src/dup.jpg", Name: "dup.jpg"},
@@ -83,7 +85,7 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 }
 
 func TestBuildTree_NameCollision(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil)
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg"},
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
@@ -106,7 +108,7 @@ func TestBuildTree_NameCollision(t *testing.T) {
 }
 
 func buildLivePhotoEntries(t *testing.T, livePhotos bool) []Entry {
-	s := New("/target", "2006/01/02", livePhotos, nil)
+	s := New("/target", "2006/01/02", livePhotos, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
@@ -152,7 +154,7 @@ func TestBuildTree_LivePhotosDisabled(t *testing.T) {
 
 func TestBuildTree_WithFileNameTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}-{MM}-{DD}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
@@ -170,7 +172,7 @@ func TestBuildTree_WithFileNameTemplate(t *testing.T) {
 
 func TestBuildTree_TemplatePreservesExtension(t *testing.T) {
 	tmpl, _ := renamer.Parse("{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/photo.JPG", Name: "photo.JPG", Ext: ".jpg"},
 	}
@@ -188,7 +190,7 @@ func TestBuildTree_TemplatePreservesExtension(t *testing.T) {
 
 func TestBuildTree_CollisionWithTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}{MM}{DD}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 		{Path: "/src2/b.jpg", Name: "b.jpg", Ext: ".jpg"},
@@ -214,7 +216,7 @@ func TestBuildTree_CollisionWithTemplate(t *testing.T) {
 
 func TestBuildTree_CollisionTemplateSeq(t *testing.T) {
 	tmpl, _ := renamer.Parse("{seq}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 		{Path: "/src2/b.jpg", Name: "b.jpg", Ext: ".jpg"},
@@ -243,7 +245,7 @@ func TestBuildTree_CollisionTemplateSeq(t *testing.T) {
 
 func TestBuildTree_UnsortedWithTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}-{MM}-{DD}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.jpg", Name: "unknown.jpg", Ext: ".jpg"},
 	}
@@ -261,7 +263,7 @@ func TestBuildTree_UnsortedWithTemplate(t *testing.T) {
 
 func TestBuildTree_LivePhotosDevicePropagation(t *testing.T) {
 	tmpl, _ := renamer.Parse("{device}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/photo.HEIC", Name: "photo.HEIC", Ext: ".heic", Device: "iPhone"},
 		{Path: "/src/photo.MOV", Name: "photo.MOV", Ext: ".mov", Device: "iPhone"},
@@ -290,7 +292,7 @@ func TestBuildTree_LivePhotosDevicePropagation(t *testing.T) {
 
 func TestBuildTree_DeviceInTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{device}/{YYYY}/{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl)
+	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/PXL_123.jpg", Name: "PXL_123.jpg", Ext: ".jpg", Device: "Pixel"},
 	}
@@ -303,5 +305,63 @@ func TestBuildTree_DeviceInTemplate(t *testing.T) {
 	want := filepath.Join("/target", "2024", "03", "15", "Pixel", "2024", "PXL_123.jpg")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
+	}
+}
+
+func TestBuildTree_NameCollisionHash(t *testing.T) {
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyHash)
+	files := []scanner.FileInfo{
+		{Path: "/src1/a.jpg", Name: "a.jpg"},
+		{Path: "/src2/a.jpg", Name: "a.jpg"},
+	}
+
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
+		return date(2024, 1, 1), true
+	}
+
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].Target == entries[1].Target {
+		t.Error("targets should differ")
+	}
+	// Первый файл остаётся без суффикса, второй получает hash-суффикс
+	wantFirst := filepath.Join("/target", "2024", "01", "01", "a.jpg")
+	if entries[0].Target != wantFirst {
+		t.Errorf("first target = %q, want %q", entries[0].Target, wantFirst)
+	}
+	if !strings.Contains(entries[1].Target, "_") {
+		t.Errorf("second target should contain suffix: %q", entries[1].Target)
+	}
+}
+
+func TestBuildTree_NameCollisionHashFallback(t *testing.T) {
+	// Искусственно создаём ситуацию, когда хеш даёт одинаковый суффикс.
+	// Так как xxhash от разных путей практически не коллизирует,
+	// проверяем логику fallback через targetCounts: добавляем три файла
+	// с одинаковым именем и проверяем, что все получают уникальные имена.
+	s := New("/target", "2006/01/02", true, nil, collision.StrategyHash)
+	files := []scanner.FileInfo{
+		{Path: "/src1/a.jpg", Name: "a.jpg"},
+		{Path: "/src2/a.jpg", Name: "a.jpg"},
+		{Path: "/src3/a.jpg", Name: "a.jpg"},
+	}
+
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
+		return date(2024, 1, 1), true
+	}
+
+	entries := s.BuildTree(context.Background(), files, nil, resolve)
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries, got %d", len(entries))
+	}
+
+	seen := make(map[string]struct{})
+	for _, e := range entries {
+		if _, ok := seen[e.Target]; ok {
+			t.Fatalf("duplicate target: %q", e.Target)
+		}
+		seen[e.Target] = struct{}{}
 	}
 }
