@@ -32,3 +32,34 @@ build-mac-app: build
 
 snapshot:
 	goreleaser release --snapshot --clean --skip=publish
+
+# ── Автоматическое создание релизных тегов ────────────────────────────────
+
+# Определяем последний semver-тег (vX.Y.Z) или используем v0.0.0
+LAST_TAG := $(shell git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+
+# Парсим X.Y.Z
+VERSION_MAJOR := $(shell echo $(LAST_TAG) | sed 's/v\([0-9]*\).*/\1/')
+VERSION_MINOR := $(shell echo $(LAST_TAG) | sed 's/v[0-9]*\.\([0-9]*\).*/\1/')
+VERSION_PATCH := $(shell echo $(LAST_TAG) | sed 's/v[0-9]*\.[0-9]*\.\([0-9]*\).*/\1/')
+
+NEXT_PATCH := v$(VERSION_MAJOR).$(VERSION_MINOR).$(shell echo $$(( $(VERSION_PATCH) + 1 )))
+NEXT_MINOR := v$(VERSION_MAJOR).$(shell echo $$(( $(VERSION_MINOR) + 1 ))).0
+NEXT_MAJOR := v$(shell echo $$(( $(VERSION_MAJOR) + 1 ))).0.0
+
+.PHONY: release-patch release-minor release-major
+
+release-patch:
+	@echo "Последний тег: $(LAST_TAG) → новый тег: $(NEXT_PATCH)"
+	git tag -a $(NEXT_PATCH) -m "Release $(NEXT_PATCH)"
+	git push origin $(NEXT_PATCH)
+
+release-minor:
+	@echo "Последний тег: $(LAST_TAG) → новый тег: $(NEXT_MINOR)"
+	git tag -a $(NEXT_MINOR) -m "Release $(NEXT_MINOR)"
+	git push origin $(NEXT_MINOR)
+
+release-major:
+	@echo "Последний тег: $(LAST_TAG) → новый тег: $(NEXT_MAJOR)"
+	git tag -a $(NEXT_MAJOR) -m "Release $(NEXT_MAJOR)"
+	git push origin $(NEXT_MAJOR)

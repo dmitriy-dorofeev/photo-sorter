@@ -79,6 +79,22 @@ photo-sorter/
 
 ## Сборка и запуск
 
+### Автоматические релизы
+
+Вместо ручного создания тега можно использовать:
+
+```bash
+# Локально — через Makefile
+make release-patch   # v0.1.0 → v0.1.1
+make release-minor   # v0.1.0 → v0.2.0
+make release-major   # v0.1.0 → v1.0.0
+
+# Или через GitHub UI: Actions → Bump Version → Run workflow
+# (выбрать patch / minor / major — тег создастся автоматически)
+```
+
+После пуша тега автоматически запускается `Release`-workflow (GoReleaser).
+
 ### Требования
 
 - Go 1.25+
