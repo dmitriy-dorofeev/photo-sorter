@@ -49,6 +49,7 @@ type Model struct {
 	// Кэш для preview.go (пересчитывается при изменении entries)
 	previewDirCache   []string
 	previewCountCache map[string]int
+	previewFileCache  map[string][]string
 
 	// Копирование
 	copyCancel   context.CancelFunc
@@ -160,6 +161,7 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.entries = nil
 	m.previewDirCache = nil
 	m.previewCountCache = nil
+	m.previewFileCache = nil
 	m.sources = newSourcesModel()
 	m.target = newTargetModel()
 	m.settings = newSettingsModel()

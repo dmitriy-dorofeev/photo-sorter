@@ -6,6 +6,9 @@ const (
 	// DefaultTemplate — шаблон папок по умолчанию (Go time layout).
 	DefaultTemplate = "2006-01-02"
 
+	// DefaultFileNameTemplate — шаблон имён файлов по умолчанию (сохраняет оригинальное имя).
+	DefaultFileNameTemplate = "{original}{ext}"
+
 	// DefaultLivePhotos — группировать Live Photos по умолчанию.
 	DefaultLivePhotos = true
 

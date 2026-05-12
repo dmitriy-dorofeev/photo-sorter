@@ -112,16 +112,18 @@ func (m Model) viewPreview() string {
 	return b.String()
 }
 
-// buildPreviewCache строит кэш директорий и счётчиков файлов.
+// buildPreviewCache строит кэш директорий, счётчиков и примеров файлов.
 // Вызывается один раз при получении entries (в updateScan).
 func buildPreviewCache(m Model) Model {
 	if len(m.entries) == 0 {
 		m.previewDirCache = nil
 		m.previewCountCache = nil
+		m.previewFileCache = nil
 		return m
 	}
 	dirSet := make(map[string]struct{})
 	countMap := make(map[string]int)
+	fileMap := make(map[string][]string)
 	for _, e := range m.entries {
 		if e.Skip {
 			continue
@@ -129,6 +131,9 @@ func buildPreviewCache(m Model) Model {
 		dir := filepath.Dir(e.Target)
 		dirSet[dir] = struct{}{}
 		countMap[dir]++
+		if len(fileMap[dir]) < 3 {
+			fileMap[dir] = append(fileMap[dir], filepath.Base(e.Target))
+		}
 	}
 	dirs := make([]string, 0, len(dirSet))
 	for d := range dirSet {
@@ -137,6 +142,7 @@ func buildPreviewCache(m Model) Model {
 	sort.Strings(dirs)
 	m.previewDirCache = dirs
 	m.previewCountCache = countMap
+	m.previewFileCache = fileMap
 	return m
 }
 
@@ -152,7 +158,7 @@ func (m Model) unsortedFiles() []string {
 	var files []string
 	for _, e := range m.entries {
 		if !e.Skip && sorter.IsUnsorted(e.Target) {
-			files = append(files, e.Source.Name)
+			files = append(files, filepath.Base(e.Target))
 		}
 	}
 	return files

@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 5 {
-		t.Errorf("expected 5 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 6 {
+		t.Errorf("expected 6 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -34,11 +34,17 @@ func TestNewModel(t *testing.T) {
 	if m.settings.items[0].AsString() != config.DefaultTemplate {
 		t.Errorf("expected default template %q, got %q", config.DefaultTemplate, m.settings.items[0].AsString())
 	}
-	if m.settings.items[1].key != "live_photos" {
-		t.Errorf("expected second setting key 'live_photos', got %s", m.settings.items[1].key)
+	if m.settings.items[1].key != "file_name_template" {
+		t.Errorf("expected second setting key 'file_name_template', got %s", m.settings.items[1].key)
 	}
-	if m.settings.items[1].AsBool() != config.DefaultLivePhotos {
-		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[1].AsBool())
+	if m.settings.items[1].AsString() != config.DefaultFileNameTemplate {
+		t.Errorf("expected default file_name_template %q, got %q", config.DefaultFileNameTemplate, m.settings.items[1].AsString())
+	}
+	if m.settings.items[2].key != "live_photos" {
+		t.Errorf("expected third setting key 'live_photos', got %s", m.settings.items[2].key)
+	}
+	if m.settings.items[2].AsBool() != config.DefaultLivePhotos {
+		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[2].AsBool())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")

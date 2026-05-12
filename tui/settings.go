@@ -47,7 +47,7 @@ func findPreset(value string) (int, bool) {
 	return 0, false
 }
 
-// formatTemplateDisplay возвращает человекочитаемое представление шаблона.
+// formatTemplateDisplay возвращает человекочитаемое представление шаблона папок.
 func formatTemplateDisplay(value string) string {
 	if value == "" {
 		return "—"
@@ -59,6 +59,48 @@ func formatTemplateDisplay(value string) string {
 		return fmt.Sprintf("%s (%s)", templatePresets[idx].label, example)
 	}
 	return fmt.Sprintf("Свой формат (%s)", example)
+}
+
+// ---------------------------------------------------------------------------
+// Пресеты шаблонов имён файлов
+// ---------------------------------------------------------------------------
+
+var fileNamePresets = []templatePreset{
+	{label: "Оригинальное имя", value: "{original}{ext}"},
+	{label: "Дата + оригинал", value: "{YYYY}-{MM}-{DD}_{original}{ext}"},
+	{label: "Дата-время + оригинал", value: "{YYYY}-{MM}-{DD}_{HH}-{mm}-{SS}_{original}{ext}"},
+	{label: "Компактная дата-время", value: "{YYYY}{MM}{DD}_{HH}{mm}{SS}{ext}"},
+	{label: "Дата-время + устройство", value: "{YYYY}-{MM}-{DD}_{HH}-{mm}-{SS}_{device}{ext}"},
+	{label: "Хронологический счётчик", value: "{YYYY}{MM}{DD}_{seq:03}{ext}"},
+	{label: "Свой формат…", value: "", isCustom: true},
+}
+
+func findFileNamePreset(value string) (int, bool) {
+	customIdx := -1
+	for i, p := range fileNamePresets {
+		if p.value == value {
+			return i, true
+		}
+		if p.isCustom {
+			customIdx = i
+		}
+	}
+	if customIdx >= 0 {
+		return customIdx, false
+	}
+	return 0, false
+}
+
+// formatFileNameDisplay возвращает человекочитаемое представление шаблона имён файлов.
+func formatFileNameDisplay(value string) string {
+	if value == "" {
+		return "—"
+	}
+	idx, found := findFileNamePreset(value)
+	if found {
+		return fileNamePresets[idx].label
+	}
+	return fmt.Sprintf("Свой формат (%s)", value)
 }
 
 // ---------------------------------------------------------------------------
@@ -110,8 +152,10 @@ type settingsModel struct {
 	cursor         int
 	items          []setting
 	editing        bool // true → редактируем custom через textinput
-	templateSelect bool // true → показываем список пресетов
-	templateCursor int  // курсор внутри списка пресетов
+	templateSelect bool // true → показываем список пресетов папок
+	templateCursor int  // курсор внутри списка пресетов папок
+	fileNameSelect bool // true → показываем список пресетов имён файлов
+	fileNameCursor int  // курсор внутри списка пресетов имён файлов
 	input          textinput.Model
 }
 
@@ -128,6 +172,13 @@ func newSettingsModel() settingsModel {
 				key:         "template",
 				help:        "Формат именования папок по дате",
 				stringValue: config.DefaultTemplate,
+				stype:       settingTypeText,
+			},
+			{
+				label:       "Шаблон имён файлов",
+				key:         "file_name_template",
+				help:        "Формат новых имён файлов",
+				stringValue: config.DefaultFileNameTemplate,
 				stype:       settingTypeText,
 			},
 			{
@@ -178,6 +229,8 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch {
 	case m.settings.templateSelect:
 		return m.updateTemplateSelect(msg)
+	case m.settings.fileNameSelect:
+		return m.updateFileNameTemplateSelect(msg)
 	case m.settings.editing:
 		return m.updateSettingsEditing(msg)
 	default:
@@ -185,7 +238,7 @@ func (m Model) updateSettings(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// Режим выбора пресета шаблона.
+// Режим выбора пресета шаблона папок.
 func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -209,16 +262,54 @@ func (m Model) updateTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEnter, tea.KeySpace:
 			preset := templatePresets[m.settings.templateCursor]
 			if preset.isCustom {
-				// Переходим в ручной ввод
 				m.settings.templateSelect = false
 				m.settings.editing = true
 				m.settings.input.SetValue(m.settings.items[m.settings.cursor].AsString())
 				m.settings.input.Focus()
 				return m, textinput.Blink
 			}
-			// Выбрали готовый пресет
 			m.settings.items[m.settings.cursor].stringValue = preset.value
 			m.settings.templateSelect = false
+			return m, nil
+		default:
+			return m, nil
+		}
+	}
+	return m, nil
+}
+
+// Режим выбора пресета шаблона имён файлов.
+func (m Model) updateFileNameTemplateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.settings.fileNameSelect = false
+			return m, nil
+
+		case tea.KeyUp:
+			if m.settings.fileNameCursor > 0 {
+				m.settings.fileNameCursor--
+			}
+			return m, nil
+
+		case tea.KeyDown:
+			if m.settings.fileNameCursor < len(fileNamePresets)-1 {
+				m.settings.fileNameCursor++
+			}
+			return m, nil
+
+		case tea.KeyEnter, tea.KeySpace:
+			preset := fileNamePresets[m.settings.fileNameCursor]
+			if preset.isCustom {
+				m.settings.fileNameSelect = false
+				m.settings.editing = true
+				m.settings.input.SetValue(m.settings.items[m.settings.cursor].AsString())
+				m.settings.input.Focus()
+				return m, textinput.Blink
+			}
+			m.settings.items[m.settings.cursor].stringValue = preset.value
+			m.settings.fileNameSelect = false
 			return m, nil
 		default:
 			return m, nil
@@ -292,10 +383,15 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case settingTypeBool:
 				item.boolValue = !item.boolValue
 			case settingTypeText:
-				// Открываем выбор пресета
-				m.settings.templateSelect = true
-				idx, _ := findPreset(item.stringValue)
-				m.settings.templateCursor = idx
+				if item.key == "template" {
+					m.settings.templateSelect = true
+					idx, _ := findPreset(item.stringValue)
+					m.settings.templateCursor = idx
+				} else if item.key == "file_name_template" {
+					m.settings.fileNameSelect = true
+					idx, _ := findFileNamePreset(item.stringValue)
+					m.settings.fileNameCursor = idx
+				}
 				return m, nil
 			case settingTypeChoice:
 				item.choiceIdx++
@@ -338,9 +434,15 @@ func (m Model) viewSettings() string {
 	b.WriteString(m.Target + "\n")
 	b.WriteString("\n")
 
-	// Если выбираем пресет шаблона — рисуем модальный список поверх
+	// Если выбираем пресет — рисуем модальный список поверх
 	if m.settings.templateSelect {
 		b.WriteString(m.viewTemplateSelect())
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
+		return b.String()
+	}
+	if m.settings.fileNameSelect {
+		b.WriteString(m.viewFileNameTemplateSelect())
 		b.WriteString("\n")
 		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
 		return b.String()
@@ -365,7 +467,11 @@ func (m Model) viewSettings() string {
 			if m.settings.editing && m.settings.cursor == i {
 				valueStr = m.settings.input.View()
 			} else {
-				valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
+				if item.key == "template" {
+					valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
+				} else {
+					valueStr = highlightStyle.Render(formatFileNameDisplay(item.stringValue))
+				}
 			}
 		case settingTypeChoice:
 			valueStr = highlightStyle.Render(item.choices[item.choiceIdx])
@@ -393,7 +499,7 @@ func (m Model) viewSettings() string {
 	return b.String()
 }
 
-// viewTemplateSelect рисует список пресетов шаблонов.
+// viewTemplateSelect рисует список пресетов шаблонов папок.
 func (m Model) viewTemplateSelect() string {
 	var b strings.Builder
 
@@ -412,6 +518,31 @@ func (m Model) viewTemplateSelect() string {
 			example := time.Now().Format(preset.value)
 			labelCol := templateLabelStyle.Render(cursor + preset.label)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+example)
+			b.WriteString(line + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+// viewFileNameTemplateSelect рисует список пресетов шаблонов имён файлов.
+func (m Model) viewFileNameTemplateSelect() string {
+	var b strings.Builder
+
+	b.WriteString(highlightStyle.Render("Выберите формат имён файлов:"))
+	b.WriteString("\n\n")
+
+	for i, preset := range fileNamePresets {
+		cursor := "  "
+		if m.settings.fileNameCursor == i {
+			cursor = highlightStyle.Render("▸ ")
+		}
+
+		if preset.label == "Свой формат…" {
+			b.WriteString(cursor + preset.label + "\n")
+		} else {
+			labelCol := templateLabelStyle.Render(cursor + preset.label)
+			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+preset.value)
 			b.WriteString(line + "\n")
 		}
 	}

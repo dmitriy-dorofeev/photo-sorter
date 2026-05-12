@@ -2,7 +2,7 @@
 
 ## Обзор проекта
 
-**photo-sorter** — консольное TUI-приложение на Go для организации фотографий и видео с разных устройств (iPhone, Android, компьютер и т.д.). Приложение сканирует исходные папки, определяет дату съёмки, пропускает дубликаты и копирует файлы в целевую папку по структуре дат (например, `YYYY/MM/DD/`).
+**photo-sorter** — консольное TUI-приложение на Go для организации фотографий и видео с разных устройств (iPhone, Android, компьютер и т.д.). Приложение сканирует исходные папки, определяет дату съёмки, пропускает дубликаты, генерирует новые имена файлов по шаблону и копирует файлы в целевую папку по структуре дат (например, `YYYY/MM-DD/`).
 
 Все комментарии в коде, UI-тексты и документация проекта написаны на русском языке.
 
@@ -42,8 +42,13 @@ photo-sorter/
 │   │   ├── deduper.go             # Двухуровневая дедупликация: размер → xxhash
 │   │   ├── hasher.go              # Потоковое вычисление xxhash
 │   │   └── deduper_test.go
+│   ├── renamer/
+│   │   ├── renamer.go             # Шаблонизатор имён файлов (плейсхолдеры: {YYYY}, {original}, {device}, {seq} и др.)
+│   │   ├── device.go              # Эвристическое определение устройства по имени файла
+│   │   ├── renamer_test.go
+│   │   └── device_test.go
 │   ├── sorter/
-│   │   ├── sorter.go              # Построение целевого дерева, разрешение коллизий
+│   │   ├── sorter.go              # Построение целевого дерева, генерация имён, разрешение коллизий
 │   │   └── sorter_test.go
 │   ├── copier/
 │   │   ├── copier.go              # Копирование с проверкой диска, отмена
@@ -128,6 +133,7 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 ./photo-sorter --source ./photos --target ./sorted --dry-run
 ./photo-sorter --source ./a --source ./b --target ./out --dry-run=false
 ./photo-sorter --source ./photos --target ./sorted --format=json
+./photo-sorter --source ./photos --target ./sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
 
 # Запуск тестов
 go test ./...
@@ -169,7 +175,7 @@ make snapshot
 
 ### Стратегия
 
-- **Unit-тесты** — в каждом пакете `internal/*`: покрывают основную логику и edge cases.
+- **Unit-тесты** — в каждом пакете `internal/*` и `internal/renamer/`: покрывают основную логику и edge cases.
 - **Integration-тест** — `internal/integration_test.go`: полный сквозной тест от сканирования до копирования на фикстурах из `testdata/e2e/`.
 - **Фикстуры** — реальные и сгенерированные файлы в `testdata/`:
   - `minimal.jpg` — JPEG с валидным EXIF-блоком (дата 2024-03-15 14:30:22).

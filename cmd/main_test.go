@@ -290,3 +290,64 @@ func TestCLIValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestCLI_NameTemplateFlag(t *testing.T) {
+	buildTestBinaries()
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cmd := exec.Command(cliBin,
+		"--source", sourceDir,
+		"--target", targetDir,
+		"--dry-run",
+		"--name-template", "{YYYY}-{MM}-{DD}_{original}{ext}",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "Найдено файлов:") {
+		t.Errorf("missing stats in output:\n%s", output)
+	}
+}
+
+func TestCLI_NameTemplateInvalid(t *testing.T) {
+	buildTestBinaries()
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cmd := exec.Command(cliBin,
+		"--source", sourceDir,
+		"--target", targetDir,
+		"--name-template", "{BAD}",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected error for invalid name template, got success:\n%s", out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "invalid file name template") {
+		t.Errorf("expected error about invalid file name template, got:\n%s", output)
+	}
+}
+
+func TestCLI_NameTemplateDefault(t *testing.T) {
+	buildTestBinaries()
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cmd := exec.Command(cliBin,
+		"--source", sourceDir,
+		"--target", targetDir,
+		"--dry-run",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("CLI failed: %v\n%s", err, out)
+	}
+	output := string(out)
+	if !strings.Contains(output, "Найдено файлов:") {
+		t.Errorf("missing stats in output:\n%s", output)
+	}
+}

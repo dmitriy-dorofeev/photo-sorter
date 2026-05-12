@@ -12,6 +12,7 @@ import (
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
 )
@@ -22,7 +23,7 @@ func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.F
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolve)
 
 	unsortedCount := 0
@@ -160,7 +161,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 4. Build tree
-	sort := sorter.New(targetDir, "2006/01/02", true)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
@@ -415,7 +416,7 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	if len(entries) != 1 {
@@ -450,7 +451,7 @@ func TestCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true)
+	sort := sorter.New(targetDir, "2006/01/02", true, nil)
 	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -465,5 +466,125 @@ func TestCancellation(t *testing.T) {
 	}
 	if copied > 0 {
 		t.Logf("cancelled after %d copies", copied)
+	}
+}
+
+func TestEndToEnd_FileNameTemplate(t *testing.T) {
+	sourceDir := filepath.Join("..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cfg := runner.Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{YYYY}-{MM}-{DD}_{device}_{original}{ext}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
+		UseMTime:         false,
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// Проверяем, что имена сгенерированы с устройством
+	var foundDeviceName bool
+	for _, e := range res.Entries {
+		if !e.Skip && !sorter.IsUnsorted(e.Target) {
+			base := filepath.Base(e.Target)
+			if strings.Contains(base, "iPhone") || strings.Contains(base, "Camera") {
+				foundDeviceName = true
+			}
+		}
+	}
+	if !foundDeviceName {
+		t.Error("expected at least one file with device in generated name")
+	}
+
+	// Копируем
+	c := copier.New(false, targetDir)
+	stats, err := c.Copy(context.Background(), res.Entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+}
+
+func TestEndToEnd_FileNameTemplate_Collision(t *testing.T) {
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Два файла с одинаковой датой в имени, разное содержимое
+	os.WriteFile(filepath.Join(sourceDir, "20240315_120000_a.jpg"), []byte("a"), 0644)
+	os.WriteFile(filepath.Join(sourceDir, "20240315_120000_b.jpg"), []byte("b"), 0644)
+
+	cfg := runner.Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{YYYY}{MM}{DD}{ext}",
+		LivePhotos:       false,
+		IncludeVideo:     false,
+		UseMTime:         false,
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(res.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(res.Entries))
+	}
+
+	// Один из файлов должен получить _1 из-за коллизии
+	foundCollision := false
+	for _, e := range res.Entries {
+		if strings.Contains(filepath.Base(e.Target), "_1") {
+			foundCollision = true
+		}
+	}
+	if !foundCollision {
+		t.Errorf("expected collision suffix _1, got targets: %v, %v", res.Entries[0].Target, res.Entries[1].Target)
+	}
+}
+
+func TestEndToEnd_FileNameTemplate_Unsorted(t *testing.T) {
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Файл без даты
+	os.WriteFile(filepath.Join(sourceDir, "photo_no_date.jpg"), []byte("x"), 0644)
+
+	cfg := runner.Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{YYYY}-{MM}-{DD}_{original}{ext}",
+		LivePhotos:       false,
+		IncludeVideo:     false,
+		UseMTime:         false,
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	if len(res.Entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(res.Entries))
+	}
+
+	if !sorter.IsUnsorted(res.Entries[0].Target) {
+		t.Errorf("expected unsorted target, got %s", res.Entries[0].Target)
+	}
+
+	// Имя должно содержать 0000-00-00
+	base := filepath.Base(res.Entries[0].Target)
+	if !strings.HasPrefix(base, "0000-00-00_") {
+		t.Errorf("expected zero-date prefix, got %s", base)
 	}
 }

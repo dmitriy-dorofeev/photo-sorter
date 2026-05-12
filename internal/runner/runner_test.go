@@ -14,12 +14,13 @@ func TestRun_EndToEnd(t *testing.T) {
 	targetDir := t.TempDir()
 
 	cfg := Config{
-		Sources:      []string{sourceDir},
-		Target:       targetDir,
-		Template:     "2006/01/02",
-		LivePhotos:   true,
-		IncludeVideo: true,
-		UseMTime:     false,
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{original}{ext}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
+		UseMTime:         false,
 	}
 
 	res, err := Run(context.Background(), cfg, nil)
@@ -69,12 +70,13 @@ func TestRun_UseModTime(t *testing.T) {
 	targetDir := t.TempDir()
 
 	cfg := Config{
-		Sources:      []string{sourceDir},
-		Target:       targetDir,
-		Template:     "2006/01/02",
-		LivePhotos:   true,
-		IncludeVideo: true,
-		UseMTime:     true,
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{original}{ext}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
+		UseMTime:         true,
 	}
 
 	res, err := Run(context.Background(), cfg, nil)
@@ -99,11 +101,12 @@ func TestRun_Progress(t *testing.T) {
 	targetDir := t.TempDir()
 
 	cfg := Config{
-		Sources:      []string{sourceDir},
-		Target:       targetDir,
-		Template:     "2006/01/02",
-		LivePhotos:   true,
-		IncludeVideo: true,
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{original}{ext}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
 	}
 
 	var stages []string
@@ -132,13 +135,14 @@ func TestRun_DupStrategies(t *testing.T) {
 		t.Run(s, func(t *testing.T) {
 			targetDir := t.TempDir()
 			cfg := Config{
-				Sources:      []string{sourceDir},
-				Target:       targetDir,
-				Template:     "2006/01/02",
-				LivePhotos:   true,
-				IncludeVideo: true,
-				UseMTime:     false,
-				DupStrategy:  s,
+				Sources:          []string{sourceDir},
+				Target:           targetDir,
+				Template:         "2006/01/02",
+				FileNameTemplate: "{original}{ext}",
+				LivePhotos:       true,
+				IncludeVideo:     true,
+				UseMTime:         false,
+				DupStrategy:      s,
 			}
 
 			res, err := Run(context.Background(), cfg, nil)
@@ -166,5 +170,58 @@ func TestRun_DupStrategies(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRun_WithFileNameTemplate(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cfg := Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{YYYY}-{MM}-{DD}_{original}{ext}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
+		UseMTime:         false,
+	}
+
+	res, err := Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// Проверяем, что имена файлов сгенерированы по шаблону
+	var foundGenerated bool
+	for _, e := range res.Entries {
+		if !e.Skip && !sorter.IsUnsorted(e.Target) {
+			base := filepath.Base(e.Target)
+			if strings.HasPrefix(base, "2024-") || strings.HasPrefix(base, "2023-") {
+				foundGenerated = true
+			}
+		}
+	}
+	if !foundGenerated {
+		t.Error("expected at least one file with generated name")
+	}
+}
+
+func TestRun_InvalidFileNameTemplate(t *testing.T) {
+	sourceDir := filepath.Join("..", "..", "testdata", "e2e", "source", "2023")
+	targetDir := t.TempDir()
+
+	cfg := Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{BAD}",
+		LivePhotos:       true,
+		IncludeVideo:     true,
+	}
+
+	_, err := Run(context.Background(), cfg, nil)
+	if err == nil {
+		t.Error("expected error for invalid file name template")
 	}
 }

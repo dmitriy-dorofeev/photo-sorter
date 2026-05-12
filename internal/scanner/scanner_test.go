@@ -215,3 +215,21 @@ func TestScan_ManyFiles(t *testing.T) {
 	}
 	t.Logf("scanned %d files in %v", want, elapsed)
 }
+
+func TestScan_PopulatesDevice(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "IMG_1234.jpg"), []byte("x"), 0644)
+
+	s := New([]string{dir}, ".jpg")
+	files, err := s.Scan(context.Background())
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	// Device заполняется в runner, а не в scanner
+	if files[0].Device != "" {
+		t.Errorf("expected empty Device from scanner, got %q", files[0].Device)
+	}
+}

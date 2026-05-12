@@ -60,23 +60,25 @@ func main() {
 	}
 
 	var (
-		sources      stringSlice
-		target       string
-		template     string
-		livePhotos   bool
-		includeVideo bool
-		dryRun       bool
-		useMTime     bool
-		dupStrategy  string
-		format       string
-		useTUI       bool
-		versionFlag  bool
-		checkUpdate  bool
+		sources          stringSlice
+		target           string
+		template         string
+		fileNameTemplate string
+		livePhotos       bool
+		includeVideo     bool
+		dryRun           bool
+		useMTime         bool
+		dupStrategy      string
+		format           string
+		useTUI           bool
+		versionFlag      bool
+		checkUpdate      bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
 	flag.StringVar(&target, "target", "", "Целевая папка")
 	flag.StringVar(&template, "template", config.DefaultTemplate, "Шаблон папок (Go time layout)")
+	flag.StringVar(&fileNameTemplate, "name-template", config.DefaultFileNameTemplate, "Шаблон имён файлов")
 	flag.BoolVar(&livePhotos, "live-photos", config.DefaultLivePhotos, "Группировать Live Photos")
 	flag.BoolVar(&includeVideo, "include-video", config.DefaultIncludeVideo, "Обрабатывать видео")
 	flag.BoolVar(&dryRun, "dry-run", true, "Пробный прогон без копирования")
@@ -99,7 +101,8 @@ func main() {
   --target string      Целевая папка (обязательно)
 
 Настройки сортировки:
-  --template string    Шаблон папок (default: "2006-01-02")
+  --template string        Шаблон папок (default: "2006-01-02")
+  --name-template string   Шаблон имён файлов (default: "{original}{ext}")
   --live-photos        Группировать Live Photos (default: true)
   --include-video      Обрабатывать видео (default: true)
   --dry-run            Пробный прогон (default: true)
@@ -118,6 +121,7 @@ func main() {
   photo-sorter --source ./photos --target ./sorted
   photo-sorter --source ./a --source ./b --target ./out --dry-run=false
   photo-sorter --source ./photos --target ./sorted --format=json
+  photo-sorter --source ./photos --target ./sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
 `)
 	}
 
@@ -134,13 +138,14 @@ func main() {
 	}
 
 	cfg := runner.Config{
-		Sources:      sources,
-		Target:       target,
-		Template:     template,
-		LivePhotos:   livePhotos,
-		IncludeVideo: includeVideo,
-		UseMTime:     useMTime,
-		DupStrategy:  dupStrategy,
+		Sources:          sources,
+		Target:           target,
+		Template:         template,
+		FileNameTemplate: fileNameTemplate,
+		LivePhotos:       livePhotos,
+		IncludeVideo:     includeVideo,
+		UseMTime:         useMTime,
+		DupStrategy:      dupStrategy,
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно

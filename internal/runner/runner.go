@@ -10,19 +10,21 @@ import (
 
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
 )
 
 // Config описывает параметры запуска pipeline.
 type Config struct {
-	Sources      []string // исходные папки
-	Target       string   // целевая папка
-	Template     string   // шаблон папок (Go time layout)
-	LivePhotos   bool     // группировать Live Photos
-	IncludeVideo bool     // включать видео
-	UseMTime     bool     // fallback на дату изменения файла
-	DupStrategy  string   // стратегия выбора оригинала из дубликатов
+	Sources          []string // исходные папки
+	Target           string   // целевая папка
+	Template         string   // шаблон папок (Go time layout)
+	FileNameTemplate string   // шаблон имён файлов
+	LivePhotos       bool     // группировать Live Photos
+	IncludeVideo     bool     // включать видео
+	UseMTime         bool     // fallback на дату изменения файла
+	DupStrategy      string   // стратегия выбора оригинала из дубликатов
 }
 
 // Result содержит результаты этапов pipeline.
@@ -65,9 +67,15 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		}
 	}()
 
-	// Валидация шаблона даты: Go time layout не должен содержать %! (MISSING).
+	// Валидация шаблона даты.
 	if strings.Contains(time.Now().Format(cfg.Template), "%!") {
 		return res, fmt.Errorf("invalid date template: %s", cfg.Template)
+	}
+
+	// Валидация и парсинг шаблона имён файлов.
+	fileNameTmpl, err := renamer.Parse(cfg.FileNameTemplate)
+	if err != nil {
+		return res, fmt.Errorf("invalid file name template: %w", err)
 	}
 
 	exts := []string{".jpg", ".jpeg", ".png", ".heic", ".heif"}
@@ -81,6 +89,12 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	if err != nil {
 		return res, fmt.Errorf("scan: %w", err)
 	}
+
+	// Заполняем Device для каждого файла.
+	for i := range files {
+		files[i].Device = renamer.DetectDevice(files[i].Name)
+	}
+
 	res.Files = files
 	if progress != nil {
 		progress("scan", len(files), len(files))
@@ -112,7 +126,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	}
 
 	// 4. Sort
-	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos)
+	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl)
 	res.Entries = srt.BuildTree(ctx, files, res.Duplicates, dr.Resolve)
 	if progress != nil {
 		progress("sort", len(res.Entries), len(res.Entries))

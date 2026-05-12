@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
 )
 
@@ -30,18 +31,24 @@ type Entry struct {
 
 // Sorter строит план сортировки.
 type Sorter struct {
-	targetRoot string
-	layout     string // например, "2006/01/02"
-	livePhotos bool
+	targetRoot       string
+	layout           string // например, "2006/01/02"
+	livePhotos       bool
+	fileNameTemplate *renamer.Template
 }
 
 // New создаёт новый Sorter.
 // livePhotos: если true, .MOV без даты получает дату от соответствующего .HEIC/.HEIF.
-func New(targetRoot, layout string, livePhotos bool) *Sorter {
+// fileNameTemplate может быть nil — тогда используется {original}{ext}.
+func New(targetRoot, layout string, livePhotos bool, fileNameTemplate *renamer.Template) *Sorter {
+	if fileNameTemplate == nil {
+		fileNameTemplate, _ = renamer.Parse("{original}{ext}")
+	}
 	return &Sorter{
-		targetRoot: targetRoot,
-		layout:     layout,
-		livePhotos: livePhotos,
+		targetRoot:       targetRoot,
+		layout:           layout,
+		livePhotos:       livePhotos,
+		fileNameTemplate: fileNameTemplate,
 	}
 }
 
@@ -91,6 +98,7 @@ func (s *Sorter) BuildTree(
 	// 3. Строим entries.
 	var entries []Entry
 	targetCounts := make(map[string]int) // для разрешения коллизий
+	seqCounts := make(map[string]int)    // счётчик {seq} внутри каждой директории
 
 	for _, f := range files {
 		if ctx.Err() != nil {
@@ -112,12 +120,17 @@ func (s *Sorter) BuildTree(
 		}
 
 		var target string
+		var dir string
 		if !ok {
-			target = filepath.Join(s.targetRoot, UnsortedDir, f.Name)
+			dir = filepath.Join(s.targetRoot, UnsortedDir)
 		} else {
-			dir := filepath.Join(s.targetRoot, date.Format(s.layout))
-			target = filepath.Join(dir, f.Name)
+			dir = filepath.Join(s.targetRoot, date.Format(s.layout))
 		}
+
+		// Генерируем имя файла по шаблону.
+		seqCounts[dir]++
+		fileName := s.fileNameTemplate.Render(date, f, seqCounts[dir])
+		target = filepath.Join(dir, fileName)
 
 		// Разрешение внутренних коллизий.
 		if _, exists := targetCounts[target]; exists {

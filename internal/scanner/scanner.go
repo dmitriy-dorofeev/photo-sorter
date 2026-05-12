@@ -20,6 +20,7 @@ type FileInfo struct {
 	Size    int64
 	ModTime time.Time
 	Ext     string
+	Device  string // эвристическое определение устройства-источника
 }
 
 // Scanner обходит папки и собирает список файлов.
