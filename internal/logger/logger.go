@@ -45,3 +45,9 @@ func (l *Logger) LogDuplicate(original, duplicate string, strategy string) error
 	msg := fmt.Sprintf("DUPLICATE: kept %s (strategy=%s), skipped %s (same hash)", original, strategy, duplicate)
 	return l.Log(msg)
 }
+
+// LogIntegrityFailure записывает информацию о несовпадении хешей после копирования.
+func (l *Logger) LogIntegrityFailure(src, dst string, srcHash, dstHash uint64) error {
+	msg := fmt.Sprintf("INTEGRITY FAILURE: %s -> %s (src_hash=%x dst_hash=%x)", src, dst, srcHash, dstHash)
+	return l.Log(msg)
+}

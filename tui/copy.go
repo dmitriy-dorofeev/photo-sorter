@@ -134,6 +134,9 @@ func (m Model) logCopyResult() Model {
 	l.Log(fmt.Sprintf("Copied: %d", m.copy.stats.Copied))
 	l.Log(fmt.Sprintf("Skipped (duplicates): %d", m.copy.stats.Skipped))
 	l.Log(fmt.Sprintf("Errors: %d", m.copy.stats.Errors))
+	if m.copy.stats.IntegrityFailures > 0 {
+		l.Log(fmt.Sprintf("Integrity failures: %d", m.copy.stats.IntegrityFailures))
+	}
 	l.Log(fmt.Sprintf("Bytes copied: %d", m.copy.stats.BytesCopied))
 	for _, e := range m.copy.stats.ErrorList {
 		l.Log(fmt.Sprintf("Error detail: %s", e.Error()))
@@ -193,6 +196,9 @@ func (m Model) viewCopy() string {
 		b.WriteString(fmt.Sprintf("Скопировано: %d\n", m.copy.stats.Copied))
 		b.WriteString(fmt.Sprintf("Пропущено (дубли): %d\n", m.copy.stats.Skipped))
 		b.WriteString(fmt.Sprintf("Ошибок: %d\n", m.copy.stats.Errors))
+		if m.copy.stats.IntegrityFailures > 0 {
+			b.WriteString(errorStyle.Render(fmt.Sprintf("Ошибок целостности: %d", m.copy.stats.IntegrityFailures)) + "\n")
+		}
 		b.WriteString("\n")
 		b.WriteString(helpStyle.Render("enter — начать заново • esc — выход"))
 	}

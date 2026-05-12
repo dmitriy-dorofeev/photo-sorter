@@ -18,11 +18,12 @@ import (
 
 // Stats содержит результат операции копирования.
 type Stats struct {
-	Copied      int
-	Skipped     int
-	Errors      int
-	BytesCopied int64
-	ErrorList   []error // до 10 первых ошибок для отчёта
+	Copied            int
+	Skipped           int
+	Errors            int
+	IntegrityFailures int
+	BytesCopied       int64
+	ErrorList         []error // до 10 первых ошибок для отчёта
 }
 
 // Copier выполняет копирование файлов.
@@ -30,12 +31,13 @@ type Copier struct {
 	dryRun     bool
 	targetRoot string
 	spaceFunc  func(string) (uint64, error)
+	hashFunc   func(context.Context, string) (uint64, error)
 }
 
 // New создаёт новый Copier.
 // targetRoot используется для проверки свободного места.
 func New(dryRun bool, targetRoot string) *Copier {
-	return &Copier{dryRun: dryRun, targetRoot: targetRoot, spaceFunc: availableSpace}
+	return &Copier{dryRun: dryRun, targetRoot: targetRoot, spaceFunc: availableSpace, hashFunc: hasher.HashFile}
 }
 
 // Copy выполняет копирование по плану сортировки.
@@ -121,8 +123,8 @@ func (c *Copier) Copy(
 					continue
 				}
 			} else {
-				hSrc, err1 := hasher.HashFile(ctx, e.Source.Path)
-				hDst, err2 := hasher.HashFile(ctx, target)
+				hSrc, err1 := c.hashFunc(ctx, e.Source.Path)
+				hDst, err2 := c.hashFunc(ctx, target)
 				if err1 == nil && err2 == nil && hSrc == hDst {
 					stats.Skipped++
 					consecutiveErrors = 0
@@ -141,11 +143,14 @@ func (c *Copier) Copy(
 			}
 		}
 
-		if err := copyFile(ctx, e.Source.Path, target); err != nil {
+		if err := c.copyFile(ctx, e.Source.Path, target); err != nil {
 			if errors.Is(err, errSkipCollision) {
 				stats.Skipped++
 				consecutiveErrors = 0
 				continue
+			}
+			if errors.Is(err, errIntegrityCheck) {
+				stats.IntegrityFailures++
 			}
 			stats.Errors++
 			c.recordError(&stats, err)
@@ -315,7 +320,14 @@ func findFreeName(target string) (string, error) {
 // появился с тем же содержимым (TOCTOU-защита после findFreeName).
 var errSkipCollision = errors.New("target collision with identical content")
 
-func copyFile(ctx context.Context, src, dst string) error {
+// errIntegrityCheck возвращается, если хеши исходника и копии не совпадают после записи.
+var errIntegrityCheck = errors.New("integrity check failed")
+
+func (c *Copier) copyFile(ctx context.Context, src, dst string) error {
+	hashFunc := c.hashFunc
+	if hashFunc == nil {
+		hashFunc = hasher.HashFile
+	}
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
@@ -366,8 +378,8 @@ func copyFile(ctx context.Context, src, dst string) error {
 				return err
 			}
 		} else if info.Mode().IsRegular() {
-			hSrc, err1 := hasher.HashFile(ctx, src)
-			hDst, err2 := hasher.HashFile(ctx, dst)
+			hSrc, err1 := hashFunc(ctx, src)
+			hDst, err2 := hashFunc(ctx, dst)
 			if err1 == nil && err2 == nil && hSrc == hDst {
 				// Тот же файл — пропускаем, удаляем temp.
 				cleanup = false
@@ -384,5 +396,20 @@ func copyFile(ctx context.Context, src, dst string) error {
 		return err
 	}
 	cleanup = false
+
+	// Проверка целостности: сверяем хеши исходника и копии.
+	hSrc, err1 := hashFunc(ctx, src)
+	hDst, err2 := hashFunc(ctx, dst)
+	if err1 != nil || err2 != nil || hSrc != hDst {
+		_ = os.Remove(dst)
+		if err1 != nil {
+			return fmt.Errorf("%w: source hash error: %v", errIntegrityCheck, err1)
+		}
+		if err2 != nil {
+			return fmt.Errorf("%w: destination hash error: %v", errIntegrityCheck, err2)
+		}
+		return fmt.Errorf("%w: hash mismatch for %s (src=%x, dst=%x)", errIntegrityCheck, dst, hSrc, hDst)
+	}
+
 	return nil
 }

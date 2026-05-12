@@ -2,13 +2,16 @@ package copier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
 )
@@ -300,7 +303,7 @@ func TestCopy_NotEnoughDiskSpace(t *testing.T) {
 
 	c := &Copier{dryRun: false, targetRoot: dstDir, spaceFunc: func(string) (uint64, error) {
 		return 1, nil // 1 байт свободно, нужно 5
-	}}
+	}, hashFunc: hasher.HashFile}
 	entries := []sorter.Entry{
 		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
 	}
@@ -345,5 +348,136 @@ func TestCopy_ContextCancelMidway(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected context cancellation error")
+	}
+}
+
+func TestCopy_IntegrityCheck_Success(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := New(false, dstDir)
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+	if stats.IntegrityFailures != 0 {
+		t.Errorf("expected 0 integrity failures, got %d", stats.IntegrityFailures)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "a.jpg")); err != nil {
+		t.Errorf("expected file to exist: %v", err)
+	}
+}
+
+func TestCopy_IntegrityCheck_Failure(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := &Copier{
+		dryRun:     false,
+		targetRoot: dstDir,
+		spaceFunc:  availableSpace,
+		hashFunc: func(ctx context.Context, path string) (uint64, error) {
+			if strings.Contains(path, dstDir) {
+				return 0xBAD, nil
+			}
+			return 0xCAFE, nil
+		},
+	}
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Errors != 1 {
+		t.Errorf("expected 1 error, got %d", stats.Errors)
+	}
+	if stats.IntegrityFailures != 1 {
+		t.Errorf("expected 1 integrity failure, got %d", stats.IntegrityFailures)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "a.jpg")); !os.IsNotExist(err) {
+		t.Errorf("expected corrupted file to be removed")
+	}
+}
+
+func TestCopy_IntegrityCheck_HashError(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := &Copier{
+		dryRun:     false,
+		targetRoot: dstDir,
+		spaceFunc:  availableSpace,
+		hashFunc: func(ctx context.Context, path string) (uint64, error) {
+			if strings.Contains(path, dstDir) {
+				return 0, errors.New("disk io error")
+			}
+			return hasher.HashFile(ctx, path)
+		},
+	}
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Errors != 1 {
+		t.Errorf("expected 1 error, got %d", stats.Errors)
+	}
+	if stats.IntegrityFailures != 1 {
+		t.Errorf("expected 1 integrity failure, got %d", stats.IntegrityFailures)
+	}
+	if _, e := os.Stat(filepath.Join(dstDir, "a.jpg")); !os.IsNotExist(e) {
+		t.Errorf("expected file to be removed after hash error")
+	}
+}
+
+func TestCopy_IntegrityCheck_DryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := &Copier{
+		dryRun:     true,
+		targetRoot: dstDir,
+		spaceFunc:  availableSpace,
+		hashFunc: func(ctx context.Context, path string) (uint64, error) {
+			return 0, errors.New("should not be called")
+		},
+	}
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Size: 5}, Target: filepath.Join(dstDir, "a.jpg")},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied (dry-run), got %d", stats.Copied)
+	}
+	if stats.IntegrityFailures != 0 {
+		t.Errorf("expected 0 integrity failures in dry-run, got %d", stats.IntegrityFailures)
+	}
+	if _, err := os.Stat(filepath.Join(dstDir, "a.jpg")); !os.IsNotExist(err) {
+		t.Error("dry-run should not create files")
 	}
 }

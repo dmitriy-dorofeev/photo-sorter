@@ -12,6 +12,7 @@ import (
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
@@ -217,11 +218,24 @@ func TestEndToEnd(t *testing.T) {
 	if stats2.Errors > 0 {
 		t.Errorf("real copy had %d errors", stats2.Errors)
 	}
+	if stats2.IntegrityFailures > 0 {
+		t.Errorf("real copy had %d integrity failures", stats2.IntegrityFailures)
+	}
 
-	// Verify files exist
+	// Verify files exist and hashes match (integrity check)
 	for _, e := range copiedEntries {
 		if _, err := os.Stat(e.Target); os.IsNotExist(err) {
 			t.Errorf("expected file to exist: %s", e.Target)
+			continue
+		}
+		hSrc, err1 := hasher.HashFile(context.Background(), e.Source.Path)
+		hDst, err2 := hasher.HashFile(context.Background(), e.Target)
+		if err1 != nil || err2 != nil {
+			t.Errorf("hash error for %s: srcErr=%v dstErr=%v", e.Source.Path, err1, err2)
+			continue
+		}
+		if hSrc != hDst {
+			t.Errorf("integrity mismatch for %s: srcHash=%x dstHash=%x", e.Source.Path, hSrc, hDst)
 		}
 	}
 
