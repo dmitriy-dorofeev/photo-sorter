@@ -13,6 +13,7 @@ import (
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/sorter"
 	"photo-sorter/tui"
@@ -146,6 +147,14 @@ func main() {
 		os.Exit(0)
 	}
 
+	exifPath, hasExif := dateresolver.FindExifTool()
+	if !hasExif {
+		fmt.Fprintln(os.Stderr, "⚠ exiftool не найден в PATH. Видео-метаданные не будут прочитаны, запись EXIF отключена.")
+		if writeExif {
+			writeExif = false
+		}
+	}
+
 	cfg := runner.Config{
 		Sources:           sources,
 		Target:            target,
@@ -157,6 +166,7 @@ func main() {
 		DupStrategy:       dupStrategy,
 		CollisionStrategy: collisionStrategy,
 		WriteExif:         writeExif,
+		ExifToolPath:      exifPath,
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
@@ -269,7 +279,7 @@ func runCLI(cfg runner.Config, dryRun bool, format string) error {
 
 	c := copier.New(dryRun, cfg.Target, collision.Strategy(cfg.CollisionStrategy))
 	c.WriteExif = cfg.WriteExif
-	c.ExifToolPath = "exiftool"
+	c.ExifToolPath = cfg.ExifToolPath
 	stats, err := c.Copy(ctx, res.Entries, nil)
 	if err != nil {
 		// Выводим частичную статистику перед возвратом ошибки

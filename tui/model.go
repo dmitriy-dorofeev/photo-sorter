@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
@@ -63,6 +64,9 @@ type Model struct {
 	// Версия и обновление
 	version      string
 	updateResult *updater.CheckResult
+
+	// Доступность exiftool
+	exifToolPath string
 }
 
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
@@ -84,13 +88,33 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.sources.Init(),
 		checkUpdateCmd(m.version),
+		checkExifToolCmd(),
 	)
+}
+
+// exifToolCheckMsg передаёт результат проверки наличия exiftool.
+type exifToolCheckMsg struct {
+	path string
+	ok   bool
+}
+
+func checkExifToolCmd() tea.Cmd {
+	return func() tea.Msg {
+		path, ok := dateresolver.FindExifTool()
+		return exifToolCheckMsg{path: path, ok: ok}
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case updateCheckMsg:
 		m.updateResult = &msg.result
+		return m, nil
+	case exifToolCheckMsg:
+		m.exifToolPath = msg.path
+		if !msg.ok {
+			m.exifToolPath = ""
+		}
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width

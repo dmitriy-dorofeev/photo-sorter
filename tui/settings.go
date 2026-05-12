@@ -507,6 +507,11 @@ func (m Model) viewSettings() string {
 
 	b.WriteString("\n")
 
+	if m.exifToolPath == "" {
+		b.WriteString(errorStyle.Render("⚠ exiftool не найден: видео-метаданные и запись EXIF недоступны.") + "\n")
+		b.WriteString("\n")
+	}
+
 	if m.settings.editing {
 		b.WriteString(helpStyle.Render("enter — сохранить • esc — отменить"))
 	} else {

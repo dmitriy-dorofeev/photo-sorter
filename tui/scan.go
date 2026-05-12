@@ -107,6 +107,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		WriteExif:         m.GetSettingBool("write_exif"),
 		DupStrategy:       m.GetSettingString("dup_strategy"),
 		CollisionStrategy: m.GetSettingString("collision_strategy"),
+		ExifToolPath:      m.exifToolPath,
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

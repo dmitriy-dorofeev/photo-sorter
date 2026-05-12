@@ -28,6 +28,7 @@ type Config struct {
 	DupStrategy       string   // стратегия выбора оригинала из дубликатов
 	CollisionStrategy string   // стратегия разрешения конфликтов имён
 	WriteExif         bool     // записывать дату в EXIF при копировании
+	ExifToolPath      string   // путь к exiftool (пусто — не использовать)
 }
 
 // Result содержит результаты этапов pipeline.
@@ -106,6 +107,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	// 2. Date resolve (batch для видео) + собираем источники дат.
 	dr := dateresolver.New()
 	dr.UseModTime = cfg.UseMTime
+	dr.ExifToolPath = cfg.ExifToolPath
 	dr.ResolveBatch(ctx, files)
 
 	dateSources := make(map[string]dateresolver.Source, len(files))
