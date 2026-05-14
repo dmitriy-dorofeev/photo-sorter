@@ -14,6 +14,7 @@ import (
 	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
+	"photo-sorter/internal/notify"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/sorter"
 	"photo-sorter/tui"
@@ -79,6 +80,7 @@ func main() {
 		versionFlag       bool
 		checkUpdate       bool
 		writeExif         bool
+		notifyFlag        bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -96,6 +98,7 @@ func main() {
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
 	flag.BoolVar(&writeExif, "write-exif", config.DefaultWriteExif, "Записывать определённую дату в EXIF (только имя/mtime)")
+	flag.BoolVar(&notifyFlag, "notify", config.DefaultNotify, "Показать системное уведомление по завершении")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -182,7 +185,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := runCLI(cfg, dryRun, format); err != nil {
+	if err := runCLI(cfg, dryRun, format, notifyFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
 		os.Exit(1)
 	}
@@ -266,7 +269,7 @@ func validateInputs(cfg runner.Config, format string) error {
 }
 
 // runCLI выполняет pipeline и копирование в CLI-режиме.
-func runCLI(cfg runner.Config, dryRun bool, format string) error {
+func runCLI(cfg runner.Config, dryRun bool, format string, notifyFlag bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -295,6 +298,18 @@ func runCLI(cfg runner.Config, dryRun bool, format string) error {
 		printJSONReport(res, stats)
 	} else {
 		printTextReport(res, stats)
+	}
+
+	if notifyFlag {
+		summary := notify.Summary{
+			Total:   len(res.Entries),
+			Copied:  stats.Copied,
+			Skipped: stats.Skipped,
+			Errors:  stats.Errors,
+		}
+		if err := notify.Send(summary.Title(), summary.Body()); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ не удалось отправить уведомление: %v\n", err)
+		}
 	}
 	return nil
 }

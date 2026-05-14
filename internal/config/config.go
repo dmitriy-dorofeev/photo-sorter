@@ -26,4 +26,7 @@ const (
 
 	// DefaultWriteExif — записывать определённую дату в EXIF по умолчанию.
 	DefaultWriteExif = false
+
+	// DefaultNotify — показывать системное уведомление по завершении.
+	DefaultNotify = true
 )

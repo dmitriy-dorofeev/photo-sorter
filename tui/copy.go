@@ -11,6 +11,7 @@ import (
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/logger"
+	"photo-sorter/internal/notify"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -96,6 +97,15 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.copy.errMsg = msg.err.Error()
 		}
 		m = m.logCopyResult()
+		if m.GetSettingBool("notify") && notify.Available() {
+			summary := notify.Summary{
+				Total:   len(m.files),
+				Copied:  m.copy.stats.Copied,
+				Skipped: m.copy.stats.Skipped,
+				Errors:  m.copy.stats.Errors,
+			}
+			_ = notify.Send(summary.Title(), summary.Body())
+		}
 		return m, nil
 
 	case tea.KeyMsg:

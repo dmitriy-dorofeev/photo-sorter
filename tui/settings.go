@@ -210,6 +210,13 @@ func newSettingsModel() settingsModel {
 				stype:     settingTypeBool,
 			},
 			{
+				label:     "Показывать уведомления",
+				key:       "notify",
+				help:      "Показать системное уведомление по завершении сортировки",
+				boolValue: config.DefaultNotify,
+				stype:     settingTypeBool,
+			},
+			{
 				label:        "Стратегия дедупликации",
 				key:          "dup_strategy",
 				help:         "Какой файл считать оригиналом при обнаружении дубликатов",

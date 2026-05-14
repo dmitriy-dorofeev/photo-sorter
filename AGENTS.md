@@ -58,6 +58,12 @@ photo-sorter/
 │   │   └── copier_test.go
 │   ├── logger/
 │   │   └── logger.go              # Запись логов операций с timestamp
+│   ├── notify/
+│   │   ├── notify.go              # API уведомлений: Summary, Title, Body, Send, Available
+│   │   ├── notify_darwin.go       # macOS: osascript display notification
+│   │   ├── notify_linux.go        # Linux: notify-send
+│   │   ├── notify_unsupported.go  # Остальные платформы — no-op
+│   │   └── notify_test.go         # Тесты формирования текста уведомления
 │   ├── updater/
 │   │   ├── updater.go             # Проверка и установка обновлений с GitHub Releases
 │   │   └── updater_test.go
@@ -173,7 +179,8 @@ make snapshot
 4. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
 5. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
 6. **logger** — после копирования создаёт лог-файл `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` в целевой папке.
-7. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
+7. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой: сколько файлов скопировано, пропущено, ошибок. Вызывается после logger в TUI и CLI, если включена настройка.
+8. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ## Тестирование
 

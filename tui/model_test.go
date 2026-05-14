@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 8 {
-		t.Errorf("expected 8 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 9 {
+		t.Errorf("expected 9 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -52,17 +52,23 @@ func TestNewModel(t *testing.T) {
 	if m.settings.items[5].AsBool() != config.DefaultWriteExif {
 		t.Errorf("expected default write_exif %v, got %v", config.DefaultWriteExif, m.settings.items[5].AsBool())
 	}
-	if m.settings.items[6].key != "dup_strategy" {
-		t.Errorf("expected seventh setting key 'dup_strategy', got %s", m.settings.items[6].key)
+	if m.settings.items[6].key != "notify" {
+		t.Errorf("expected seventh setting key 'notify', got %s", m.settings.items[6].key)
 	}
-	if m.settings.items[6].AsString() != config.DefaultDupStrategy {
-		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[6].AsString())
+	if m.settings.items[6].AsBool() != config.DefaultNotify {
+		t.Errorf("expected default notify %v, got %v", config.DefaultNotify, m.settings.items[6].AsBool())
 	}
-	if m.settings.items[7].key != "collision_strategy" {
-		t.Errorf("expected eighth setting key 'collision_strategy', got %s", m.settings.items[7].key)
+	if m.settings.items[7].key != "dup_strategy" {
+		t.Errorf("expected eighth setting key 'dup_strategy', got %s", m.settings.items[7].key)
 	}
-	if m.settings.items[7].AsString() != config.DefaultCollisionStrategy {
-		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[7].AsString())
+	if m.settings.items[7].AsString() != config.DefaultDupStrategy {
+		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[7].AsString())
+	}
+	if m.settings.items[8].key != "collision_strategy" {
+		t.Errorf("expected ninth setting key 'collision_strategy', got %s", m.settings.items[8].key)
+	}
+	if m.settings.items[8].AsString() != config.DefaultCollisionStrategy {
+		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[8].AsString())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")
