@@ -16,6 +16,7 @@ import (
 type Result struct {
 	Original   scanner.FileInfo
 	Duplicates []scanner.FileInfo
+	Hash       uint64 // xxhash группы дубликатов
 }
 
 // Deduper ищет дублирующиеся файлы.
@@ -24,25 +25,44 @@ type Deduper struct {
 	livePhotos  bool
 	strategy    Strategy
 	dateSources map[string]dateresolver.Source
+	knownHashes map[uint64]struct{} // FullHash из state (межзапусковые)
+	hashes      map[string]uint64   // все вычисленные FullHash (путь → хеш)
 }
 
 // New создаёт новый Deduper.
 // livePhotos: если true, пары Live Photos (.HEIC + .MOV с одним basename) не считаются дубликатами.
 // strategy: стратегия выбора оригинала из группы дубликатов.
 // dateSources: мапа путь → источник даты (используется для стратегии best-meta).
-func New(files []scanner.FileInfo, livePhotos bool, strategy Strategy, dateSources map[string]dateresolver.Source) *Deduper {
-	return &Deduper{files: files, livePhotos: livePhotos, strategy: strategy, dateSources: dateSources}
+// knownHashes: FullHash из state для межзапусковой дедупликации.
+func New(files []scanner.FileInfo, livePhotos bool, strategy Strategy, dateSources map[string]dateresolver.Source, knownHashes map[uint64]struct{}) *Deduper {
+	if knownHashes == nil {
+		knownHashes = make(map[uint64]struct{})
+	}
+	return &Deduper{
+		files:       files,
+		livePhotos:  livePhotos,
+		strategy:    strategy,
+		dateSources: dateSources,
+		knownHashes: knownHashes,
+		hashes:      make(map[string]uint64),
+	}
 }
 
-// FindDuplicates возвращает список групп дубликатов.
+// FileHashes возвращает мапу всех вычисленных FullHash (путь → хеш).
+func (d *Deduper) FileHashes() map[string]uint64 {
+	return d.hashes
+}
+
+// FindDuplicates возвращает список групп дубликатов и пути межзапусковых дубликатов.
 // Алгоритм:
 //  1. Группировка по размеру.
 //  2. Для групп с ≥2 файлами вычисляется xxhash.
 //  3. Группировка по хешу внутри размерной группы.
 //  4. Пары Live Photos (.HEIC + .MOV с одним basename) исключаются из дубликатов.
-func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
+//  5. Если хеш файла есть в knownHashes (из state) — файл считается межзапусковым дубликатом.
+func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, []string, error) {
 	if len(d.files) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	// 1. Группировка по размеру.
@@ -57,6 +77,7 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 	}
 
 	var results []Result
+	var crossRunDups []string
 
 	// 2. Обрабатываем только группы с ≥2 файлами.
 	for _, group := range sizeGroups {
@@ -65,7 +86,7 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 		}
 
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		// 3. Вычисляем хеш для каждого файла в группе.
@@ -77,6 +98,7 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 			if err != nil {
 				continue
 			}
+			d.hashes[f.Path] = h
 			hashed = append(hashed, fileHash{info: f, hash: h})
 		}
 
@@ -108,6 +130,11 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 				if d.livePhotos && isLivePhotoPair(original, candidate) {
 					continue
 				}
+				// Межзапусковая дедупликация: если хеш есть в knownHashes — дубликат.
+				if _, known := d.knownHashes[fh.hash]; known {
+					crossRunDups = append(crossRunDups, candidate.Path)
+					continue
+				}
 				duplicates = append(duplicates, candidate)
 			}
 
@@ -115,12 +142,13 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, error) {
 				results = append(results, Result{
 					Original:   original,
 					Duplicates: duplicates,
+					Hash:       hashGroup[0].hash,
 				})
 			}
 		}
 	}
 
-	return results, nil
+	return results, crossRunDups, nil
 }
 
 // isLivePhotoPair возвращает true, если два файла являются парой Live Photos:

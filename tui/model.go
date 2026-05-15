@@ -8,6 +8,7 @@ import (
 	"photo-sorter/internal/deduper"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/state"
 	"photo-sorter/internal/updater"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -46,6 +47,12 @@ type Model struct {
 	files      []scanner.FileInfo
 	duplicates []deduper.Result
 	entries    []sorter.Entry
+
+	// Данные для инкрементальности
+	fastHashes map[string]uint64
+	fullHashes map[string]uint64
+	allPaths   []string
+	st         *state.State
 
 	// Кэш для preview.go (пересчитывается при изменении entries)
 	previewDirCache   []string

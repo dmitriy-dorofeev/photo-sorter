@@ -9,6 +9,7 @@ import (
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/state"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -21,6 +22,10 @@ type scanResultMsg struct {
 	files      []scanner.FileInfo
 	duplicates []deduper.Result
 	entries    []sorter.Entry
+	fastHashes map[string]uint64
+	fullHashes map[string]uint64
+	allPaths   []string
+	st         *state.State
 	err        error
 	generation int
 }
@@ -108,6 +113,13 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		DupStrategy:       m.GetSettingString("dup_strategy"),
 		CollisionStrategy: m.GetSettingString("collision_strategy"),
 		ExifToolPath:      m.exifToolPath,
+		FullCheck:         !m.GetSettingBool("skip_sorted"),
+	}
+
+	// Закрываем предыдущее состояние, если оно осталось от прошлого запуска.
+	if m.st != nil {
+		_ = m.st.Close()
+		m.st = nil
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,6 +150,10 @@ func (m Model) startScan() (Model, tea.Cmd) {
 			files:      res.Files,
 			duplicates: res.Duplicates,
 			entries:    res.Entries,
+			fastHashes: res.FastHashes,
+			fullHashes: res.FullHashes,
+			allPaths:   res.AllPaths,
+			st:         res.State,
 			generation: gen,
 		}
 	}
@@ -196,6 +212,10 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.files = msg.files
 		m.duplicates = msg.duplicates
 		m.entries = msg.entries
+		m.fastHashes = msg.fastHashes
+		m.fullHashes = msg.fullHashes
+		m.allPaths = msg.allPaths
+		m.st = msg.st
 		m = buildPreviewCache(m)
 		return m, nil
 

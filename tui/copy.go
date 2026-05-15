@@ -12,6 +12,7 @@ import (
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/logger"
 	"photo-sorter/internal/notify"
+	"photo-sorter/internal/state"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -96,6 +97,26 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil && !errors.Is(msg.err, context.Canceled) {
 			m.copy.errMsg = msg.err.Error()
 		}
+
+		// Сохраняем state после копирования (даже при частичной ошибке).
+		if m.st != nil {
+			records := make([]state.Record, 0, len(m.entries))
+			for _, e := range m.entries {
+				records = append(records, state.Record{
+					SourcePath: e.Source.Path,
+					Size:       e.Source.Size,
+					ModTime:    e.Source.ModTime,
+					FastHash:   m.fastHashes[e.Source.Path],
+					FullHash:   m.fullHashes[e.Source.Path],
+					TargetPath: e.Target,
+				})
+			}
+			_ = m.st.Update(records)
+			_ = m.st.Cleanup(m.allPaths)
+			_ = m.st.Close()
+			m.st = nil
+		}
+
 		m = m.logCopyResult()
 		if m.GetSettingBool("notify") && notify.Available() {
 			summary := notify.Summary{

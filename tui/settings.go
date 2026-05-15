@@ -217,6 +217,13 @@ func newSettingsModel() settingsModel {
 				stype:     settingTypeBool,
 			},
 			{
+				label:     "Пропускать уже отсортированные",
+				key:       "skip_sorted",
+				help:      "Не обрабатывать файлы, которые уже были отсортированы ранее",
+				boolValue: true,
+				stype:     settingTypeBool,
+			},
+			{
 				label:        "Стратегия дедупликации",
 				key:          "dup_strategy",
 				help:         "Какой файл считать оригиналом при обнаружении дубликатов",

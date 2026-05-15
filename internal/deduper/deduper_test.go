@@ -159,8 +159,8 @@ func TestFindDuplicates(t *testing.T) {
 			if tt.name == "live photos disabled treats as duplicates" {
 				livePhotos = false
 			}
-			d := New(tt.files, livePhotos, StrategyPath, nil)
-			got, err := d.FindDuplicates(context.Background())
+			d := New(tt.files, livePhotos, StrategyPath, nil, nil)
+			got, _, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
 			}
@@ -190,8 +190,8 @@ func TestFindDuplicates_HashError(t *testing.T) {
 		{Path: noRead, Name: "secret.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true, StrategyPath, nil)
-	results, err := d.FindDuplicates(context.Background())
+	d := New(files, true, StrategyPath, nil, nil)
+	results, _, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -213,8 +213,8 @@ func TestFindDuplicates_NamedPipe(t *testing.T) {
 		{Path: pipePath, Name: "pipe.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true, StrategyPath, nil)
-	results, err := d.FindDuplicates(context.Background())
+	d := New(files, true, StrategyPath, nil, nil)
+	results, _, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -270,8 +270,8 @@ func TestFindDuplicates_Strategies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := New(files, true, tt.strategy, tt.dateSources)
-			results, err := d.FindDuplicates(context.Background())
+			d := New(files, true, tt.strategy, tt.dateSources, nil)
+			results, _, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
 			}
@@ -302,12 +302,12 @@ func BenchmarkFindDuplicates(b *testing.B) {
 			Size: int64(len(content)),
 		})
 	}
-	d := New(files, true, StrategyPath, nil)
+	d := New(files, true, StrategyPath, nil, nil)
 	ctx := context.Background()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := d.FindDuplicates(ctx)
+		_, _, err := d.FindDuplicates(ctx)
 		if err != nil {
 			b.Fatal(err)
 		}

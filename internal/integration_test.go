@@ -21,8 +21,8 @@ import (
 )
 
 func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.FileInfo, resolve func(context.Context, scanner.FileInfo) (time.Time, bool)) ([]sorter.Entry, int) {
-	ded := deduper.New(files, true, deduper.StrategyPath, nil)
-	dupResults, err := ded.FindDuplicates(context.Background())
+	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
@@ -132,8 +132,8 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 3. Find duplicates
-	ded := deduper.New(files, true, deduper.StrategyPath, nil)
-	dupResults, err := ded.FindDuplicates(context.Background())
+	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
@@ -427,8 +427,8 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	}
 
 	// Verify tree uses exiftool date
-	ded := deduper.New(files, true, deduper.StrategyPath, nil)
-	dupResults, err := ded.FindDuplicates(context.Background())
+	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
@@ -462,8 +462,8 @@ func TestCancellation(t *testing.T) {
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
 	files, _ := sc.Scan(context.Background())
 	resolver := dateresolver.New()
-	ded := deduper.New(files, true, deduper.StrategyPath, nil)
-	dupResults, err := ded.FindDuplicates(context.Background())
+	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}

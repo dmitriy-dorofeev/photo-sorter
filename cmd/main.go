@@ -17,6 +17,7 @@ import (
 	"photo-sorter/internal/notify"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/state"
 	"photo-sorter/tui"
 )
 
@@ -81,6 +82,8 @@ func main() {
 		checkUpdate       bool
 		writeExif         bool
 		notifyFlag        bool
+		fullCheck         bool
+		resetState        bool
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -99,6 +102,8 @@ func main() {
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
 	flag.BoolVar(&writeExif, "write-exif", config.DefaultWriteExif, "Записывать определённую дату в EXIF (только имя/mtime)")
 	flag.BoolVar(&notifyFlag, "notify", config.DefaultNotify, "Показать системное уведомление по завершении")
+	flag.BoolVar(&fullCheck, "full-check", false, "Игнорировать state, пересортировать все файлы")
+	flag.BoolVar(&resetState, "reset-state", false, "Удалить state перед запуском")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -170,6 +175,14 @@ func main() {
 		CollisionStrategy: collisionStrategy,
 		WriteExif:         writeExif,
 		ExifToolPath:      exifPath,
+		FullCheck:         fullCheck,
+		DryRun:            dryRun,
+	}
+
+	if resetState && cfg.Target != "" {
+		if err := state.Reset(cfg.Target); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ не удалось сбросить state: %v\n", err)
+		}
 	}
 
 	// TUI-режим: если не указаны source/target и -tui не выключен явно
