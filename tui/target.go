@@ -2,19 +2,31 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // targetModel — состояние экрана выбора целевой папки.
 type targetModel struct {
 	dirBrowserModel
+	creating  bool
+	input     textinput.Model
+	createErr string
 }
 
 func newTargetModel() targetModel {
-	return targetModel{}
+	ti := textinput.New()
+	ti.Placeholder = "Новая папка"
+	ti.CharLimit = 255
+	ti.Width = 40
+
+	return targetModel{
+		input: ti,
+	}
 }
 
 func (t targetModel) Init() tea.Cmd {
@@ -22,6 +34,11 @@ func (t targetModel) Init() tea.Cmd {
 }
 
 func (m Model) updateTarget(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Режим создания новой папки
+	if m.target.creating {
+		return m.updateTargetCreating(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.Type {
@@ -68,10 +85,77 @@ func (m Model) updateTarget(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Target = filepath.Clean(item.path)
 			return m, nil
 
+		case "n": // n — создать новую папку
+			m.target.creating = true
+			m.target.createErr = ""
+			m.target.input.SetValue("")
+			m.target.input.Focus()
+			return m, textinput.Blink
+
+		case "c": // c — выбрать текущую папку как цель
+			m.Target = filepath.Clean(m.target.currentDir)
+			return m, nil
 		}
 	}
 
 	return m, nil
+}
+
+func (m Model) updateTargetCreating(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyEsc:
+			m.target.creating = false
+			m.target.createErr = ""
+			m.target.input.Blur()
+			return m, nil
+
+		case tea.KeyEnter:
+			name := strings.TrimSpace(m.target.input.Value())
+			if name == "" {
+				m.target.createErr = "имя папки не может быть пустым"
+				return m, nil
+			}
+			if strings.ContainsAny(name, "/\\\x00") {
+				m.target.createErr = "имя содержит запрещённые символы"
+				return m, nil
+			}
+
+			newPath := filepath.Join(m.target.currentDir, name)
+			if err := os.MkdirAll(newPath, 0755); err != nil {
+				m.target.createErr = err.Error()
+				return m, nil
+			}
+
+			m.target.creating = false
+			m.target.createErr = ""
+			m.target.input.Blur()
+
+			items, err := loadDirItems(m.target.currentDir)
+			m.target.items = items
+			if err != nil {
+				m.target.readErr = err.Error()
+			} else {
+				m.target.readErr = ""
+			}
+
+			// Установить курсор на новую папку
+			for i, item := range m.target.items {
+				if item.name == name {
+					m.target.cursor = i
+					break
+				}
+			}
+			return m, nil
+
+		default:
+		}
+	}
+
+	var cmd tea.Cmd
+	m.target.input, cmd = m.target.input.Update(msg)
+	return m, cmd
 }
 
 func (m Model) viewTarget() string {
@@ -131,13 +215,25 @@ func (m Model) viewTarget() string {
 
 	b.WriteString("\n")
 
+	// Режим создания новой папки
+	if m.target.creating {
+		b.WriteString(highlightStyle.Render("Имя новой папки:") + "\n")
+		b.WriteString(m.target.input.View() + "\n")
+		if m.target.createErr != "" {
+			b.WriteString(errorStyle.Render("  Ошибка: "+m.target.createErr) + "\n")
+		}
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("enter — создать • esc — отмена"))
+		return b.String()
+	}
+
 	nextHint := helpStyle.Render("→ — продолжить »")
 	if m.Target == "" {
 		nextHint = helpStyle.Render("→ — продолжить (выберите целевую папку)")
 	}
 
 	b.WriteString(helpStyle.Render(
-		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел/t — выбрать цель • ← — назад • → — продолжить • esc — выход",
+		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел/t — выбрать цель • c — выбрать текущую • n — новая папка • ← — назад • → — продолжить • esc — выход",
 	))
 	b.WriteString("\n")
 	b.WriteString(nextHint)

@@ -229,3 +229,181 @@ func TestSettings_WriteExif(t *testing.T) {
 		t.Error("expected write_exif to be true after toggle")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Тесты создания папки и выбора текущей директории в target screen
+// ---------------------------------------------------------------------------
+
+func TestTargetCreateFolder(t *testing.T) {
+	tmp := t.TempDir()
+
+	m := NewModel("test")
+	m.screen = ScreenTarget
+	m.target.currentDir = tmp
+	items, err := loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.target.items = items
+
+	// Нажимаем 'n' — входим в режим создания
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newM.(Model)
+	if !m.target.creating {
+		t.Fatal("expected creating to be true")
+	}
+	if cmd == nil {
+		t.Error("expected textinput.Blink command")
+	}
+
+	// Вводим имя папки и нажимаем Enter
+	m.target.input.SetValue("new-folder")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.target.creating {
+		t.Error("expected creating to be false after successful creation")
+	}
+	if m.target.createErr != "" {
+		t.Errorf("unexpected createErr: %s", m.target.createErr)
+	}
+
+	// Проверяем что папка создана на диске
+	newPath := filepath.Join(tmp, "new-folder")
+	info, err := os.Stat(newPath)
+	if err != nil {
+		t.Fatalf("expected folder to be created: %v", err)
+	}
+	if !info.IsDir() {
+		t.Fatal("expected created path to be a directory")
+	}
+
+	// Проверяем что папка появилась в списке и курсор на ней
+	found := false
+	for i, item := range m.target.items {
+		if item.name == "new-folder" {
+			found = true
+			if m.target.cursor != i {
+				t.Errorf("expected cursor on new folder (idx %d), got %d", i, m.target.cursor)
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected new folder to appear in items")
+	}
+}
+
+func TestTargetCreateFolderError(t *testing.T) {
+	tmp := t.TempDir()
+
+	m := NewModel("test")
+	m.screen = ScreenTarget
+	m.target.currentDir = tmp
+	items, err := loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.target.items = items
+
+	// Входим в режим создания
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newM.(Model)
+
+	// Пустое имя
+	m.target.input.SetValue("   ")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.target.createErr == "" {
+		t.Error("expected createErr for empty folder name")
+	}
+	if !m.target.creating {
+		t.Error("expected still in creating mode after error")
+	}
+
+	// Запрещённые символы
+	m.target.input.SetValue("foo/bar")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.target.createErr == "" {
+		t.Error("expected createErr for invalid folder name")
+	}
+
+	// Убеждаемся что папка не создана
+	badPath := filepath.Join(tmp, "foo")
+	if _, err := os.Stat(badPath); !os.IsNotExist(err) {
+		t.Error("expected no folder to be created for invalid name")
+	}
+
+	// Отмена через Esc
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = newM.(Model)
+	if m.target.creating {
+		t.Error("expected creating to be false after Esc")
+	}
+}
+
+func TestTargetSelectCurrentDir(t *testing.T) {
+	tmp := t.TempDir()
+
+	m := NewModel("test")
+	m.screen = ScreenTarget
+	m.target.currentDir = tmp
+	items, err := loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.target.items = items
+
+	// Нажимаем 'c' — выбираем текущую папку
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = newM.(Model)
+
+	if m.Target != tmp {
+		t.Errorf("expected Target to be %q, got %q", tmp, m.Target)
+	}
+
+	// Проверяем что можно перейти дальше
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = newM.(Model)
+	if m.screen != ScreenSettings {
+		t.Errorf("expected screen Settings, got %d", m.screen)
+	}
+}
+
+func TestTargetSelectCurrentDirAndCreate(t *testing.T) {
+	tmp := t.TempDir()
+
+	m := NewModel("test")
+	m.screen = ScreenTarget
+	m.target.currentDir = tmp
+	items, err := loadDirItems(tmp)
+	if err != nil {
+		t.Fatalf("loadDirItems: %v", err)
+	}
+	m.target.items = items
+
+	// Выбираем текущую папку
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	m = newM.(Model)
+	if m.Target != tmp {
+		t.Fatalf("expected Target %q, got %q", tmp, m.Target)
+	}
+
+	// Создаём подпапку — Target не должен измениться
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	m = newM.(Model)
+	m.target.input.SetValue("subfolder")
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+
+	if m.Target != tmp {
+		t.Errorf("expected Target to remain %q after creating subfolder, got %q", tmp, m.Target)
+	}
+
+	// Проверяем что подпапка создана
+	subPath := filepath.Join(tmp, "subfolder")
+	if info, err := os.Stat(subPath); err != nil || !info.IsDir() {
+		t.Error("expected subfolder to be created")
+	}
+}
