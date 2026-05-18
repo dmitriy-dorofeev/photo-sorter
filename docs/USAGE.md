@@ -14,7 +14,7 @@
 
 1. **Выбор источника** — браузер папок. Выберите папку с фотографиями (`Пробел`), затем `→`.
 2. **Выбор цели** — выберите папку, куда скопировать отсортированные файлы.
-3. **Настройки** — шаблон папок, шаблон имён файлов, опции Live Photos, видео, mtime, уведомления.
+3. **Настройки** — шаблон папок, шаблон имён файлов, опции Live Photos, видео, mtime, уведомления, формат отчёта (text или HTML).
 4. **Сканирование** — прогресс обработки файлов.
 5. **Предпросмотр** — дерево целевой структуры, список дублей и файлов без даты.
 6. **Копирование** — прогресс копирования файлов.
@@ -36,8 +36,8 @@
 # Записать дату в EXIF (если дата взята из имени/mtime)
 ./photo-sorter --source ~/Photos --target ~/Sorted --write-exif --dry-run=false
 
-# JSON-отчёт вместо текстового
-./photo-sorter --source ~/Photos --target ~/Sorted --format=json
+# HTML-отчёт вместо текстового
+./photo-sorter --source ~/Photos --target ~/Sorted --report-format=html --dry-run=false
 
 # Свой шаблон имён файлов
 ./photo-sorter --source ~/Photos --target ~/Sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
@@ -62,7 +62,7 @@
 | `--notify` | Системное уведомление по завершении | `true` |
 | `--full-check` | Игнорировать state | `false` |
 | `--reset-state` | Удалить файл состояния перед запуском | `false` |
-| `--format` | Формат отчёта: `text` или `json` | `text` |
+| `--report-format` | Формат файла-отчёта: `text` или `html` | `html` |
 | `--collision-strategy` | Стратегия коллизий: `counter` или `hash` | `counter` |
 
 ## Первый запуск на реальных данных

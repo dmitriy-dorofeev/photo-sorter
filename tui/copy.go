@@ -10,8 +10,9 @@ import (
 
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/copier"
-	"photo-sorter/internal/logger"
 	"photo-sorter/internal/notify"
+	"photo-sorter/internal/report"
+	"photo-sorter/internal/sorter"
 	"photo-sorter/internal/state"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -28,16 +29,17 @@ type copyDoneMsg struct {
 }
 
 type copyModel struct {
-	width   int
-	height  int
-	running bool
-	current int
-	total   int
-	done    bool
-	errMsg  string
-	stats   copier.Stats
-	aborted bool   // true если пользователь нажал Esc
-	logErr  string // ошибка создания лог-файла (предупреждение)
+	width     int
+	height    int
+	running   bool
+	current   int
+	total     int
+	done      bool
+	errMsg    string
+	stats     copier.Stats
+	aborted   bool   // true если пользователь нажал Esc
+	logErr    string // ошибка создания отчёта (предупреждение)
+	reportMsg string // путь к сохранённому отчёту (успех)
 }
 
 func newCopyModel() copyModel {
@@ -155,36 +157,51 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) logCopyResult() Model {
-	logPath := filepath.Join(m.Target, time.Now().Format("2006-01-02_15-04-05")+"_photo-sorter.log")
-	l, err := logger.New(logPath)
-	if err != nil {
-		m.copy.logErr = fmt.Sprintf("Не удалось создать лог: %v", err)
-		return m
-	}
-	defer l.Close()
-
-	l.Log(fmt.Sprintf("Sources: %s", strings.Join(m.Sources, ", ")))
-	l.Log(fmt.Sprintf("Target: %s", m.Target))
-	l.Log(fmt.Sprintf("Files found: %d", len(m.files)))
-	l.Log(fmt.Sprintf("Copied: %d", m.copy.stats.Copied))
-	l.Log(fmt.Sprintf("Skipped (duplicates): %d", m.copy.stats.Skipped))
-	l.Log(fmt.Sprintf("Errors: %d", m.copy.stats.Errors))
-	if m.copy.stats.IntegrityFailures > 0 {
-		l.Log(fmt.Sprintf("Integrity failures: %d", m.copy.stats.IntegrityFailures))
-	}
-	l.Log(fmt.Sprintf("Bytes copied: %d", m.copy.stats.BytesCopied))
-	for _, e := range m.copy.stats.ErrorList {
-		l.Log(fmt.Sprintf("Error detail: %s", e.Error()))
-	}
+	var dupGroups []report.DupGroup
 	strategy := m.GetSettingString("dup_strategy")
-	for _, dupGroup := range m.duplicates {
-		for _, dup := range dupGroup.Duplicates {
-			_ = l.LogDuplicate(dupGroup.Original.Path, dup.Path, strategy)
+	for _, g := range m.duplicates {
+		dups := make([]string, len(g.Duplicates))
+		for i, d := range g.Duplicates {
+			dups[i] = d.Path
+		}
+		dupGroups = append(dupGroups, report.DupGroup{
+			Original:   g.Original.Path,
+			Duplicates: dups,
+			Strategy:   strategy,
+		})
+	}
+
+	var unsortedFiles []string
+	for _, e := range m.entries {
+		if !e.Skip && sorter.IsUnsorted(e.Target) {
+			unsortedFiles = append(unsortedFiles, e.Source.Path)
 		}
 	}
-	if m.copy.errMsg != "" {
-		l.Log(fmt.Sprintf("Fatal error: %s", m.copy.errMsg))
+
+	data := report.Data{
+		Sources:           m.Sources,
+		Target:            m.Target,
+		FilesFound:        len(m.files),
+		Copied:            m.copy.stats.Copied,
+		Skipped:           m.copy.stats.Skipped,
+		Errors:            m.copy.stats.Errors,
+		IntegrityFailures: m.copy.stats.IntegrityFailures,
+		ExifWrites:        m.copy.stats.ExifWrites,
+		ExifFailures:      m.copy.stats.ExifFailures,
+		BytesCopied:       m.copy.stats.BytesCopied,
+		ErrorList:         m.copy.stats.ErrorList,
+		Duplicates:        dupGroups,
+		UnsortedFiles:     unsortedFiles,
+		FatalError:        m.copy.errMsg,
 	}
+
+	reportFormat := m.GetSettingString("report_format")
+	path, err := report.Generate(m.Target, reportFormat, data)
+	if err != nil {
+		m.copy.logErr = fmt.Sprintf("Не удалось сохранить отчёт: %v", err)
+		return m
+	}
+	m.copy.reportMsg = fmt.Sprintf("Отчёт сохранён: %s", filepath.Base(path))
 	return m
 }
 
@@ -225,6 +242,9 @@ func (m Model) viewCopy() string {
 	} else if m.copy.done {
 		b.WriteString(successStyle.Render("✓ Копирование завершено!"))
 		b.WriteString("\n\n")
+		if m.copy.reportMsg != "" {
+			b.WriteString(successStyle.Render("📝 "+m.copy.reportMsg) + "\n\n")
+		}
 		if m.copy.logErr != "" {
 			b.WriteString(errorStyle.Render("⚠ "+m.copy.logErr) + "\n\n")
 		}

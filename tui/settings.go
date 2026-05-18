@@ -243,6 +243,16 @@ func newSettingsModel() settingsModel {
 				choiceIdx:    0,
 				stringValue:  "counter",
 			},
+			{
+				label:        "Формат отчёта",
+				key:          "report_format",
+				help:         "Формат файла-отчёта по завершении сортировки",
+				stype:        settingTypeChoice,
+				choices:      []string{"HTML (.html)", "Текстовый (.log)"},
+				choiceValues: []string{"html", "text"},
+				choiceIdx:    0,
+				stringValue:  config.DefaultReportFormat,
+			},
 		},
 		input: ti,
 	}

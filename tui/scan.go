@@ -114,6 +114,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		CollisionStrategy: m.GetSettingString("collision_strategy"),
 		ExifToolPath:      m.exifToolPath,
 		FullCheck:         !m.GetSettingBool("skip_sorted"),
+		ReportFormat:      m.GetSettingString("report_format"),
 	}
 
 	// Закрываем предыдущее состояние, если оно осталось от прошлого запуска.

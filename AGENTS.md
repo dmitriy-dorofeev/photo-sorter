@@ -56,8 +56,9 @@ photo-sorter/
 │   ├── copier/
 │   │   ├── copier.go              # Копирование с проверкой диска, отмена, post-copy проверка целостности (xxhash)
 │   │   └── copier_test.go
-│   ├── logger/
-│   │   └── logger.go              # Запись логов операций с timestamp
+│   ├── report/
+│   │   ├── report.go              # Генерация итогового отчёта: text (.log) или HTML (.html)
+│   │   └── report_test.go
 │   ├── notify/
 │   │   ├── notify.go              # API уведомлений: Summary, Title, Body, Send, Available
 │   │   ├── notify_darwin.go       # macOS: osascript display notification
@@ -141,9 +142,9 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 # CLI-режим
 ./photo-sorter --source ./photos --target ./sorted --dry-run
 ./photo-sorter --source ./a --source ./b --target ./out --dry-run=false
-./photo-sorter --source ./photos --target ./sorted --format=json
 ./photo-sorter --source ./photos --target ./sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
 ./photo-sorter --source ./photos --target ./sorted --collision-strategy=hash --dry-run=false
+./photo-sorter --source ./photos --target ./sorted --report-format=html --dry-run=false
 
 # Запуск тестов
 go test ./...
@@ -180,8 +181,11 @@ make snapshot
 5. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename). Поддерживает межзапусковую дедупликацию через `knownHashes` (FullHash из state).
 6. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
 7. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
-8. **logger** — после копирования создаёт лог-файл `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` в целевой папке.
-9. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой: сколько файлов скопировано, пропущено, ошибок. Вызывается после logger в TUI и CLI, если включена настройка.
+8. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:
+   - `text` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` (как раньше, строки с timestamp).
+   - `html` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.html` (визуальная страница с карточками статистики, таблицами дубликатов, ошибок и unsorted-файлов).
+   Формат выбирается флагом `--report-format` (CLI) или настройкой «Формат отчёта» в TUI. При `dry-run` файл отчёта не создаётся.
+9. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой: сколько файлов скопировано, пропущено, ошибок. Вызывается после report в TUI и CLI, если включена настройка.
 10. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ### Инкрементальные запуски (поведение по умолчанию)
@@ -263,7 +267,7 @@ go test ./internal/ -run TestCancellation -v
 
 - **Только копирование** — приложение никогда не перемещает и не удаляет исходные файлы.
 
-- **Логирование** — каждый запуск сохраняет статистику в файл лога в целевой директории.
+- **Отчёт** — каждый запуск сохраняет статистику в файл отчёта (text `.log` или HTML `.html`) в целевой директории.
 - **Unknown date → `unsorted/`** — файлы без распознаваемой даты не отбрасываются, а кладутся в отдельную папку.
 
 ## Что ещё не реализовано (TODO)

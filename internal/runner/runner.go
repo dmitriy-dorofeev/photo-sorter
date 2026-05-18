@@ -33,6 +33,7 @@ type Config struct {
 	ExifToolPath      string   // путь к exiftool (пусто — не использовать)
 	FullCheck         bool     // игнорировать state при фильтрации
 	DryRun            bool     // пробный прогон — не изменять state
+	ReportFormat      string   // формат файла-отчёта: text | html
 }
 
 // Result содержит результаты этапов pipeline.

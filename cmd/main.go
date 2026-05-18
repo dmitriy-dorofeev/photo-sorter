@@ -15,6 +15,7 @@ import (
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/notify"
+	"photo-sorter/internal/report"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/sorter"
 	"photo-sorter/internal/state"
@@ -77,6 +78,7 @@ func main() {
 		dupStrategy       string
 		collisionStrategy string
 		format            string
+		reportFormat      string
 		useTUI            bool
 		versionFlag       bool
 		checkUpdate       bool
@@ -96,7 +98,8 @@ func main() {
 	flag.BoolVar(&useMTime, "use-mtime", config.DefaultUseMTime, "Fallback на дату изменения файла")
 	flag.StringVar(&dupStrategy, "dup-strategy", config.DefaultDupStrategy, "Стратегия дедупликации: path | largest | newest | best-meta")
 	flag.StringVar(&collisionStrategy, "collision-strategy", config.DefaultCollisionStrategy, "Стратегия конфликтов имён: counter | hash")
-	flag.StringVar(&format, "format", "text", "Формат отчёта: text | json")
+	flag.StringVar(&format, "format", "text", "Формат вывода в stdout: text | json")
+	flag.StringVar(&reportFormat, "report-format", config.DefaultReportFormat, "Формат файла-отчёта: text | html")
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
@@ -128,8 +131,9 @@ func main() {
   --collision-strategy Стратегия конфликтов имён: counter | hash (default: counter)
 
 Вывод:
-  --format string      Формат отчёта: text | json (default: "text")
-  --version            Показать версию и выйти
+  --format string        Формат вывода в stdout: text | json (default: "text")
+  --report-format string Формат файла-отчёта: text | html (default: "html")
+  --version              Показать версию и выйти
 
 Обновление:
   --check-update       Проверить наличие новой версии
@@ -177,6 +181,7 @@ func main() {
 		ExifToolPath:      exifPath,
 		FullCheck:         fullCheck,
 		DryRun:            dryRun,
+		ReportFormat:      reportFormat,
 	}
 
 	if resetState && cfg.Target != "" {
@@ -192,20 +197,20 @@ func main() {
 	}
 
 	// CLI-режим
-	if err := validateInputs(cfg, format); err != nil {
+	if err := validateInputs(cfg, format, reportFormat); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		flag.Usage()
 		os.Exit(1)
 	}
 
-	if err := runCLI(cfg, dryRun, format, notifyFlag); err != nil {
+	if err := runCLI(cfg, dryRun, format, reportFormat, notifyFlag); err != nil {
 		fmt.Fprintf(os.Stderr, "Ошибка: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 // validateInputs проверяет корректность аргументов CLI.
-func validateInputs(cfg runner.Config, format string) error {
+func validateInputs(cfg runner.Config, format, reportFormat string) error {
 	if len(cfg.Sources) == 0 {
 		return fmt.Errorf("ошибка: укажите хотя бы одну исходную папку (--source)")
 	}
@@ -233,7 +238,11 @@ func validateInputs(cfg runner.Config, format string) error {
 	}
 
 	if format != "text" && format != "json" {
-		return fmt.Errorf("ошибка: формат должен быть 'text' или 'json'")
+		return fmt.Errorf("ошибка: формат вывода должен быть 'text' или 'json'")
+	}
+
+	if reportFormat != "text" && reportFormat != "html" {
+		return fmt.Errorf("ошибка: формат отчёта должен быть 'text' или 'html'")
 	}
 
 	if cfg.DupStrategy != "path" && cfg.DupStrategy != "largest" && cfg.DupStrategy != "newest" && cfg.DupStrategy != "best-meta" {
@@ -282,7 +291,7 @@ func validateInputs(cfg runner.Config, format string) error {
 }
 
 // runCLI выполняет pipeline и копирование в CLI-режиме.
-func runCLI(cfg runner.Config, dryRun bool, format string, notifyFlag bool) error {
+func runCLI(cfg runner.Config, dryRun bool, format, reportFormat string, notifyFlag bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
@@ -304,6 +313,9 @@ func runCLI(cfg runner.Config, dryRun bool, format string, notifyFlag bool) erro
 		} else {
 			printTextReport(res, stats)
 		}
+		if !dryRun {
+			_ = writeReportFile(cfg, reportFormat, res, stats, err.Error())
+		}
 		return fmt.Errorf("копирование: %w", err)
 	}
 
@@ -311,6 +323,12 @@ func runCLI(cfg runner.Config, dryRun bool, format string, notifyFlag bool) erro
 		printJSONReport(res, stats)
 	} else {
 		printTextReport(res, stats)
+	}
+
+	if !dryRun {
+		if err := writeReportFile(cfg, reportFormat, res, stats, ""); err != nil {
+			fmt.Fprintf(os.Stderr, "⚠ не удалось сохранить отчёт: %v\n", err)
+		}
 	}
 
 	if notifyFlag {
@@ -443,4 +461,44 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 		fmt.Fprintf(os.Stderr, "Ошибка вывода JSON: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func writeReportFile(cfg runner.Config, reportFormat string, res runner.Result, stats copier.Stats, fatalError string) error {
+	var dupGroups []report.DupGroup
+	for _, g := range res.Duplicates {
+		dups := make([]string, len(g.Duplicates))
+		for i, d := range g.Duplicates {
+			dups[i] = d.Path
+		}
+		dupGroups = append(dupGroups, report.DupGroup{
+			Original:   g.Original.Path,
+			Duplicates: dups,
+			Strategy:   cfg.DupStrategy,
+		})
+	}
+
+	unsortedFiles := collectUnsortedFiles(res.Entries, false)
+
+	rpt := report.Data{
+		Sources:           cfg.Sources,
+		Target:            cfg.Target,
+		FilesFound:        len(res.Files),
+		Copied:            stats.Copied,
+		Skipped:           stats.Skipped,
+		Errors:            stats.Errors,
+		IntegrityFailures: stats.IntegrityFailures,
+		ExifWrites:        stats.ExifWrites,
+		ExifFailures:      stats.ExifFailures,
+		BytesCopied:       stats.BytesCopied,
+		ErrorList:         stats.ErrorList,
+		Duplicates:        dupGroups,
+		UnsortedFiles:     unsortedFiles,
+		FatalError:        fatalError,
+	}
+
+	path, err := report.Generate(cfg.Target, reportFormat, rpt)
+	if err == nil {
+		fmt.Fprintf(os.Stderr, "Отчёт сохранён: %s\n", path)
+	}
+	return err
 }

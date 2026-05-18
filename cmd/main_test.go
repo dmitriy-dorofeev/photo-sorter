@@ -293,7 +293,7 @@ func TestCLIValidation(t *testing.T) {
 		{
 			name:   "invalid format",
 			args:   []string{"--source", "/tmp/in", "--target", "/tmp/out", "--format", "xml"},
-			errMsg: "формат должен быть",
+			errMsg: "формат вывода должен быть",
 		},
 		{
 			name:   "missing source dir",

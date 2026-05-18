@@ -29,4 +29,7 @@ const (
 
 	// DefaultNotify — показывать системное уведомление по завершении.
 	DefaultNotify = true
+
+	// DefaultReportFormat — формат файла-отчёта по умолчанию.
+	DefaultReportFormat = "html"
 )
