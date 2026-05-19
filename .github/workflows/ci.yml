@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: ['**']
   pull_request:
     branches: [main, master]
 
@@ -20,6 +20,33 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '1.25'
+
+      - name: Check formatting (gofmt)
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "Найдены неотформатированные файлы:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Install analyzers
+        run: |
+          go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.22.5
+
+      - name: Staticcheck
+        run: staticcheck ./...
+
+      - name: Govulncheck
+        run: govulncheck ./...
+
+      - name: Gosec
+        run: gosec -exclude=G404 ./...
 
       - name: Run tests
         run: go test ./...
