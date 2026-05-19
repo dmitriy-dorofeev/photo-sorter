@@ -21,12 +21,12 @@ import (
 )
 
 func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.FileInfo, resolve func(context.Context, scanner.FileInfo) (time.Time, bool)) ([]sorter.Entry, int) {
-	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	ded := deduper.New(files, true, true, deduper.StrategyPath, nil, nil)
 	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
+	sort := sorter.New(targetDir, "2006/01/02", true, true, nil, collision.StrategyCounter)
 	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolve, nil)
 	if err != nil {
 		t.Fatalf("BuildTree failed: %v", err)
@@ -135,7 +135,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 3. Find duplicates
-	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	ded := deduper.New(files, true, true, deduper.StrategyPath, nil, nil)
 	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
@@ -167,7 +167,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// 4. Build tree
-	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
+	sort := sorter.New(targetDir, "2006/01/02", true, true, nil, collision.StrategyCounter)
 	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 	if err != nil {
 		t.Fatalf("BuildTree failed: %v", err)
@@ -433,12 +433,12 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 	}
 
 	// Verify tree uses exiftool date
-	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	ded := deduper.New(files, true, true, deduper.StrategyPath, nil, nil)
 	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
+	sort := sorter.New(targetDir, "2006/01/02", true, true, nil, collision.StrategyCounter)
 	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 	if err != nil {
 		t.Fatalf("BuildTree failed: %v", err)
@@ -470,12 +470,12 @@ func TestCancellation(t *testing.T) {
 	sc := scanner.New([]string{sourceDir}, ".jpg", ".jpeg", ".heic", ".heif", ".mov", ".mp4", ".png")
 	files, _ := sc.Scan(context.Background())
 	resolver := dateresolver.New()
-	ded := deduper.New(files, true, deduper.StrategyPath, nil, nil)
+	ded := deduper.New(files, true, true, deduper.StrategyPath, nil, nil)
 	dupResults, _, err := ded.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("dedup failed: %v", err)
 	}
-	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
+	sort := sorter.New(targetDir, "2006/01/02", true, true, nil, collision.StrategyCounter)
 	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
 	if err != nil {
 		t.Fatalf("BuildTree failed: %v", err)
@@ -493,6 +493,73 @@ func TestCancellation(t *testing.T) {
 	}
 	if copied > 0 {
 		t.Logf("cancelled after %d copies", copied)
+	}
+}
+
+func TestEndToEnd_RawJPEGClustering(t *testing.T) {
+	sourceDir := t.TempDir()
+	targetDir := t.TempDir()
+
+	// Создаём пару RAW + JPEG с одинаковым basename
+	jpgPath := filepath.Join(sourceDir, "IMG_0001.JPG")
+	cr2Path := filepath.Join(sourceDir, "IMG_0001.CR2")
+	os.WriteFile(jpgPath, []byte("fake jpeg with exif"), 0644)
+	os.WriteFile(cr2Path, []byte("fake raw data"), 0644)
+
+	cfg := runner.Config{
+		Sources:          []string{sourceDir},
+		Target:           targetDir,
+		Template:         "2006/01/02",
+		FileNameTemplate: "{original}{ext}",
+		LivePhotos:       false,
+		ClusterRawJPEG:   true,
+		IncludeVideo:     false,
+		UseMTime:         true,
+	}
+
+	res, err := runner.Run(context.Background(), cfg, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(res.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(res.Entries))
+	}
+
+	// JPEG должен получить дату от mtime (единственный источник)
+	// RAW должен унаследовать ту же дату от JPEG
+	var jpgTarget, cr2Target string
+	for _, e := range res.Entries {
+		if e.Source.Ext == ".jpg" {
+			jpgTarget = e.Target
+		}
+		if e.Source.Ext == ".cr2" {
+			cr2Target = e.Target
+		}
+	}
+	if jpgTarget == "" || cr2Target == "" {
+		t.Fatalf("missing targets: jpg=%q cr2=%q", jpgTarget, cr2Target)
+	}
+	if sorter.IsUnsorted(jpgTarget) {
+		t.Errorf("JPG should have a date, got unsorted: %s", jpgTarget)
+	}
+	if sorter.IsUnsorted(cr2Target) {
+		t.Errorf("CR2 should inherit date from JPG, got unsorted: %s", cr2Target)
+	}
+	if filepath.Dir(jpgTarget) != filepath.Dir(cr2Target) {
+		t.Errorf("JPG and CR2 should be in same dir: %q vs %q", jpgTarget, cr2Target)
+	}
+
+	// Копируем
+	c := copier.New(false, targetDir, collision.StrategyCounter)
+	stats, err := c.Copy(context.Background(), res.Entries, nil)
+	if err != nil {
+		t.Fatalf("copy failed: %v", err)
+	}
+	if stats.Errors > 0 {
+		t.Errorf("copy had %d errors", stats.Errors)
+	}
+	if stats.Copied != 2 {
+		t.Errorf("expected 2 copied, got %d", stats.Copied)
 	}
 }
 

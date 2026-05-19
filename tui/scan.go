@@ -107,6 +107,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		Template:          m.GetSettingString("template"),
 		FileNameTemplate:  m.GetSettingString("file_name_template"),
 		LivePhotos:        m.GetSettingBool("live_photos"),
+		ClusterRawJPEG:    m.GetSettingBool("cluster_raw_jpeg"),
 		IncludeVideo:      m.GetSettingBool("include_video"),
 		UseMTime:          m.GetSettingBool("use_mtime"),
 		WriteExif:         m.GetSettingBool("write_exif"),

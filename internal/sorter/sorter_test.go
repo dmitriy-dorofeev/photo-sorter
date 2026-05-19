@@ -19,7 +19,7 @@ func date(year, month, day int) time.Time {
 }
 
 func TestBuildTree_Basic(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
@@ -42,7 +42,7 @@ func TestBuildTree_Basic(t *testing.T) {
 }
 
 func TestBuildTree_Unsorted(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.bin", Name: "unknown.bin", Ext: ".bin"},
 	}
@@ -62,7 +62,7 @@ func TestBuildTree_Unsorted(t *testing.T) {
 }
 
 func TestBuildTree_SkipDuplicates(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/original.jpg", Name: "original.jpg"},
 		{Path: "/src/dup.jpg", Name: "dup.jpg"},
@@ -95,7 +95,7 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 }
 
 func TestBuildTree_NameCollision(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg"},
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
@@ -121,7 +121,7 @@ func TestBuildTree_NameCollision(t *testing.T) {
 }
 
 func buildLivePhotoEntries(t *testing.T, livePhotos bool) []Entry {
-	s := New("/target", "2006/01/02", livePhotos, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", livePhotos, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
@@ -170,7 +170,7 @@ func TestBuildTree_LivePhotosDisabled(t *testing.T) {
 
 func TestBuildTree_WithFileNameTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}-{MM}-{DD}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 	}
@@ -191,7 +191,7 @@ func TestBuildTree_WithFileNameTemplate(t *testing.T) {
 
 func TestBuildTree_TemplatePreservesExtension(t *testing.T) {
 	tmpl, _ := renamer.Parse("{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/photo.JPG", Name: "photo.JPG", Ext: ".jpg"},
 	}
@@ -212,7 +212,7 @@ func TestBuildTree_TemplatePreservesExtension(t *testing.T) {
 
 func TestBuildTree_CollisionWithTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}{MM}{DD}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 		{Path: "/src2/b.jpg", Name: "b.jpg", Ext: ".jpg"},
@@ -241,7 +241,7 @@ func TestBuildTree_CollisionWithTemplate(t *testing.T) {
 
 func TestBuildTree_CollisionTemplateSeq(t *testing.T) {
 	tmpl, _ := renamer.Parse("{seq}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 		{Path: "/src2/b.jpg", Name: "b.jpg", Ext: ".jpg"},
@@ -273,7 +273,7 @@ func TestBuildTree_CollisionTemplateSeq(t *testing.T) {
 
 func TestBuildTree_UnsortedWithTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{YYYY}-{MM}-{DD}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.jpg", Name: "unknown.jpg", Ext: ".jpg"},
 	}
@@ -294,7 +294,7 @@ func TestBuildTree_UnsortedWithTemplate(t *testing.T) {
 
 func TestBuildTree_LivePhotosDevicePropagation(t *testing.T) {
 	tmpl, _ := renamer.Parse("{device}_{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/photo.HEIC", Name: "photo.HEIC", Ext: ".heic", Device: "iPhone"},
 		{Path: "/src/photo.MOV", Name: "photo.MOV", Ext: ".mov", Device: "iPhone"},
@@ -326,7 +326,7 @@ func TestBuildTree_LivePhotosDevicePropagation(t *testing.T) {
 
 func TestBuildTree_DeviceInTemplate(t *testing.T) {
 	tmpl, _ := renamer.Parse("{device}/{YYYY}/{original}{ext}")
-	s := New("/target", "2006/01/02", true, tmpl, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, tmpl, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/PXL_123.jpg", Name: "PXL_123.jpg", Ext: ".jpg", Device: "Pixel"},
 	}
@@ -346,7 +346,7 @@ func TestBuildTree_DeviceInTemplate(t *testing.T) {
 }
 
 func TestBuildTree_NameCollisionHash(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyHash)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyHash)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg"},
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
@@ -381,7 +381,7 @@ func TestBuildTree_NameCollisionHashFallback(t *testing.T) {
 	// Так как xxhash от разных путей практически не коллизирует,
 	// проверяем логику fallback через targetCounts: добавляем три файла
 	// с одинаковым именем и проверяем, что все получают уникальные имена.
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyHash)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyHash)
 	files := []scanner.FileInfo{
 		{Path: "/src1/a.jpg", Name: "a.jpg"},
 		{Path: "/src2/a.jpg", Name: "a.jpg"},
@@ -410,7 +410,7 @@ func TestBuildTree_NameCollisionHashFallback(t *testing.T) {
 }
 
 func TestBuildTree_DateSource(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/a.jpg", Name: "a.jpg", Ext: ".jpg"},
 		{Path: "/src/b.jpg", Name: "b.jpg", Ext: ".jpg"},
@@ -441,7 +441,7 @@ func TestBuildTree_DateSource(t *testing.T) {
 }
 
 func TestBuildTree_LivePhotos_DateSource(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/IMG_1234.HEIC", Name: "IMG_1234.HEIC", Ext: ".heic"},
 		{Path: "/src/IMG_1234.MOV", Name: "IMG_1234.MOV", Ext: ".mov"},
@@ -475,7 +475,7 @@ func TestBuildTree_LivePhotos_DateSource(t *testing.T) {
 }
 
 func TestBuildTree_DateSource_None(t *testing.T) {
-	s := New("/target", "2006/01/02", true, nil, collision.StrategyCounter)
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
 	files := []scanner.FileInfo{
 		{Path: "/src/unknown.bin", Name: "unknown.bin", Ext: ".bin"},
 	}
@@ -497,5 +497,66 @@ func TestBuildTree_DateSource_None(t *testing.T) {
 	}
 	if entries[0].DateSource != dateresolver.SourceNone {
 		t.Errorf("DateSource = %v, want SourceNone", entries[0].DateSource)
+	}
+}
+
+func TestBuildTree_RawJPEGClustering(t *testing.T) {
+	s := New("/target", "2006/01/02", true, true, nil, collision.StrategyCounter)
+	files := []scanner.FileInfo{
+		{Path: "/src/IMG_0001.JPG", Name: "IMG_0001.JPG", Ext: ".jpg"},
+		{Path: "/src/IMG_0001.CR2", Name: "IMG_0001.CR2", Ext: ".cr2"},
+	}
+
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
+		if f.Ext == ".jpg" {
+			return date(2024, 6, 10), true
+		}
+		return time.Time{}, false
+	}
+
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	want := filepath.Join("/target", "2024", "06", "10")
+	if filepath.Dir(entries[0].Target) != want {
+		t.Errorf("JPG target dir = %q, want %q", filepath.Dir(entries[0].Target), want)
+	}
+	if filepath.Dir(entries[1].Target) != want {
+		t.Errorf("CR2 target dir = %q, want %q", filepath.Dir(entries[1].Target), want)
+	}
+}
+
+func TestBuildTree_RawJPEGClusteringDisabled(t *testing.T) {
+	s := New("/target", "2006/01/02", true, false, nil, collision.StrategyCounter)
+	files := []scanner.FileInfo{
+		{Path: "/src/IMG_0001.JPG", Name: "IMG_0001.JPG", Ext: ".jpg"},
+		{Path: "/src/IMG_0001.CR2", Name: "IMG_0001.CR2", Ext: ".cr2"},
+	}
+
+	resolve := func(_ context.Context, f scanner.FileInfo) (time.Time, bool) {
+		if f.Ext == ".jpg" {
+			return date(2024, 6, 10), true
+		}
+		return time.Time{}, false
+	}
+
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	wantJPG := filepath.Join("/target", "2024", "06", "10")
+	if filepath.Dir(entries[0].Target) != wantJPG {
+		t.Errorf("JPG target dir = %q, want %q", filepath.Dir(entries[0].Target), wantJPG)
+	}
+	wantCR2 := filepath.Join("/target", UnsortedDir, "IMG_0001.CR2")
+	if entries[1].Target != wantCR2 {
+		t.Errorf("CR2 target = %q, want %q", entries[1].Target, wantCR2)
 	}
 }

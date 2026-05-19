@@ -21,30 +21,33 @@ type Result struct {
 
 // Deduper ищет дублирующиеся файлы.
 type Deduper struct {
-	files       []scanner.FileInfo
-	livePhotos  bool
-	strategy    Strategy
-	dateSources map[string]dateresolver.Source
-	knownHashes map[uint64]struct{} // FullHash из state (межзапусковые)
-	hashes      map[string]uint64   // все вычисленные FullHash (путь → хеш)
+	files             []scanner.FileInfo
+	livePhotos        bool
+	rawJPEGClustering bool
+	strategy          Strategy
+	dateSources       map[string]dateresolver.Source
+	knownHashes       map[uint64]struct{} // FullHash из state (межзапусковые)
+	hashes            map[string]uint64   // все вычисленные FullHash (путь → хеш)
 }
 
 // New создаёт новый Deduper.
 // livePhotos: если true, пары Live Photos (.HEIC + .MOV с одним basename) не считаются дубликатами.
+// rawJPEGClustering: если true, пары RAW + JPEG с одинаковым basename не считаются дубликатами.
 // strategy: стратегия выбора оригинала из группы дубликатов.
 // dateSources: мапа путь → источник даты (используется для стратегии best-meta).
 // knownHashes: FullHash из state для межзапусковой дедупликации.
-func New(files []scanner.FileInfo, livePhotos bool, strategy Strategy, dateSources map[string]dateresolver.Source, knownHashes map[uint64]struct{}) *Deduper {
+func New(files []scanner.FileInfo, livePhotos bool, rawJPEGClustering bool, strategy Strategy, dateSources map[string]dateresolver.Source, knownHashes map[uint64]struct{}) *Deduper {
 	if knownHashes == nil {
 		knownHashes = make(map[uint64]struct{})
 	}
 	return &Deduper{
-		files:       files,
-		livePhotos:  livePhotos,
-		strategy:    strategy,
-		dateSources: dateSources,
-		knownHashes: knownHashes,
-		hashes:      make(map[string]uint64),
+		files:             files,
+		livePhotos:        livePhotos,
+		rawJPEGClustering: rawJPEGClustering,
+		strategy:          strategy,
+		dateSources:       dateSources,
+		knownHashes:       knownHashes,
+		hashes:            make(map[string]uint64),
 	}
 }
 
@@ -139,6 +142,9 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, []string, error
 				if d.livePhotos && isLivePhotoPair(original, candidate) {
 					continue
 				}
+				if d.rawJPEGClustering && isRawJPEGPair(original, candidate) {
+					continue
+				}
 				duplicates = append(duplicates, candidate)
 			}
 
@@ -153,6 +159,36 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, []string, error
 	}
 
 	return results, crossRunDups, nil
+}
+
+// isRawJPEGPair возвращает true, если два файла являются парой RAW + JPEG:
+// одинаковый basename (без расширения), один — RAW, другой — JPEG.
+func isRawJPEGPair(a, b scanner.FileInfo) bool {
+	baseA := strings.TrimSuffix(a.Name, filepath.Ext(a.Name))
+	baseB := strings.TrimSuffix(b.Name, filepath.Ext(b.Name))
+	if !strings.EqualFold(baseA, baseB) {
+		return false
+	}
+
+	extA := strings.ToLower(a.Ext)
+	extB := strings.ToLower(b.Ext)
+
+	rawExts := map[string]bool{".cr2": true, ".nef": true, ".arw": true, ".dng": true, ".raf": true}
+	jpegExts := map[string]bool{".jpg": true, ".jpeg": true}
+
+	isRaw := rawExts[extA]
+	isJpeg := jpegExts[extB]
+	if isRaw && isJpeg {
+		return true
+	}
+
+	isRaw = rawExts[extB]
+	isJpeg = jpegExts[extA]
+	if isRaw && isJpeg {
+		return true
+	}
+
+	return false
 }
 
 // isLivePhotoPair возвращает true, если два файла являются парой Live Photos:

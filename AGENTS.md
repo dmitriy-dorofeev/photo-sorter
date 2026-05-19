@@ -61,7 +61,8 @@ photo-sorter/
 │   │   └── report_test.go
 │   ├── notify/
 │   │   ├── notify.go              # API уведомлений: Summary, Title, Body, Send, Available
-│   │   ├── notify_darwin.go       # macOS: osascript display notification
+│   │   ├── notify_darwin.go       # macOS: terminal-notifier (с иконкой) → osascript fallback
+│   │   ├── embed_darwin.go        # Встроенный terminal-notifier.zip
 │   │   ├── notify_linux.go        # Linux: notify-send
 │   │   ├── notify_unsupported.go  # Остальные платформы — no-op
 │   │   └── notify_test.go         # Тесты формирования текста уведомления
@@ -182,18 +183,18 @@ make snapshot
 
 ## Архитектура и поток данных
 
-1. **scanner** — параллельно обходит исходные папки (`filepath.WalkDir` + `errgroup`), фильтрует по расширениям, собирает `[]FileInfo`.
+1. **scanner** — параллельно обходит исходные папки (`filepath.WalkDir` + `errgroup`), фильтрует по расширениям (`.jpg`, `.jpeg`, `.png`, `.heic`, `.heif`, `.mov`, `.mp4`, `.avi`, `.mkv`, а при включённой кластеризации — `.cr2`, `.nef`, `.arw`, `.dng`, `.raf`), собирает `[]FileInfo`.
 2. **state** — хранилище межзапускового состояния в `go.etcd.io/bbolt` (`<target>/.photo-sorter/state.bolt`). Содержит `Record` для каждого обработанного файла: `SourcePath`, `Size`, `ModTime`, `FastHash`, `FullHash`, `TargetPath`. Используется для фильтрации неизменившихся файлов и межзапусковой дедупликации.
 3. **hasher** — вычисляет `xxhash`: `HashFile` (полный файл) для deduper и copier; `FastHash` (первые 64KB + последние 64KB) для быстрой проверки изменений в state.
 4. **dateresolver** — для каждого файла: EXIF (JPEG) → видео-метаданные (exiftool, если доступен) → парсинг имени (8 паттернов) → `mtime` (если включено `UseModTime`) → `unsorted/`. Источник даты (`DateSource`) прокидывается дальше в pipeline. Путь к `exiftool` передаётся через `runner.Config.ExifToolPath`.
-5. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename). Поддерживает межзапусковую дедупликацию через `knownHashes` (FullHash из state).
-6. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename).
+5. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename) и пары RAW + JPEG (`.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename). Поддерживает межзапусковую дедупликацию через `knownHashes` (FullHash из state).
+6. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename), RAW + JPEG fallback (RAW без даты получает дату от соответствующего JPEG/HEIC с тем же basename).
 7. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
 8. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:
    - `text` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` (как раньше, строки с timestamp).
    - `html` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.html` (визуальная страница с карточками статистики, таблицами дубликатов, ошибок и unsorted-файлов).
    Формат выбирается флагом `--report-format` (CLI) или настройкой «Формат отчёта» в TUI. При `dry-run` файл отчёта не создаётся.
-9. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой: сколько файлов скопировано, пропущено, ошибок. Вызывается после report в TUI и CLI, если включена настройка.
+9. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой. На macOS приоритет отдаётся `terminal-notifier` (встроен в бинарник): если приложение запущено из `.app` bundle, уведомление отправляется с `-sender com.photosorter.app` и `-appIcon` (иконка из `build/macos/photo-sorter.icns`). Если `terminal-notifier` недоступен — fallback на `osascript display notification` (без иконки). Вызывается после report в TUI и CLI, если включена настройка.
 10. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ### Инкрементальные запуски (поведение по умолчанию)
@@ -231,6 +232,7 @@ go test ./... -v
 # Только integration
 go test ./internal/ -run TestEndToEnd -v
 go test ./internal/ -run TestEndToEnd_UseModTime -v
+go test ./internal/ -run TestEndToEnd_RawJPEGClustering -v
 go test ./internal/ -run TestCancellation -v
 ```
 
@@ -263,6 +265,7 @@ go test ./internal/ -run TestCancellation -v
 
 - **Дубликаты** — двухуровневая проверка (размер → хеш), чтобы не хешировать все файлы.
 - **Live Photos** — `.HEIC` + `.MOV` с одинаковым basename не считаются дублями друг друга; `.MOV` без даты получает дату от соответствующего `.HEIC`.
+- **RAW + JPEG кластеризация** — `.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename не считаются дублями; RAW без даты получает дату от соответствующего JPEG. Включается флагом `--cluster-raw-jpeg` (default `true`).
 - **Коллизии имён** — если в целевой папке файл с таким именем уже есть, сравниваются хеши: совпадают → пропускаем, разные → суффикс по выбранной стратегии (`counter`: `_1`, `_2`; `hash`: `_a3f7b2`). Стратегия задаётся флагом `--collision-strategy` или в TUI. При `hash` один и тот же исходный файл всегда получает одинаковый суффикс (идемпотентность).
 - **Файлы без даты** — помещаются в `unsorted/` в корне целевой папки. Никогда не теряются.
 - **Недостаточно места** — `copier` проверяет свободное место через `unix.Statfs` перед началом копирования.
@@ -280,7 +283,6 @@ go test ./internal/ -run TestCancellation -v
 
 ## Что ещё не реализовано (TODO)
 
-- RAW + JPEG кластеризация.
 - Перceptual hash (pHash) для похожих фото.
 - Плагин-архитектура для парсинга имён.
 - Web-интерфейс / API.

@@ -26,6 +26,7 @@ type Config struct {
 	Template          string   // шаблон папок (Go time layout)
 	FileNameTemplate  string   // шаблон имён файлов
 	LivePhotos        bool     // группировать Live Photos
+	ClusterRawJPEG    bool     // группировать RAW + JPEG
 	IncludeVideo      bool     // включать видео
 	UseMTime          bool     // fallback на дату изменения файла
 	DupStrategy       string   // стратегия выбора оригинала из дубликатов
@@ -100,6 +101,9 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	exts := []string{".jpg", ".jpeg", ".png", ".heic", ".heif"}
 	if cfg.IncludeVideo {
 		exts = append(exts, ".mov", ".mp4", ".avi", ".mkv")
+	}
+	if cfg.ClusterRawJPEG {
+		exts = append(exts, ".cr2", ".nef", ".arw", ".dng", ".raf")
 	}
 
 	// 1. Scan
@@ -222,7 +226,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	if strategy == "" {
 		strategy = deduper.StrategyPath
 	}
-	d := deduper.New(toProcess, cfg.LivePhotos, strategy, dateSources, knownHashes)
+	d := deduper.New(toProcess, cfg.LivePhotos, cfg.ClusterRawJPEG, strategy, dateSources, knownHashes)
 	dupResults, crossRunDups, err := d.FindDuplicates(ctx)
 	if err != nil {
 		return res, fmt.Errorf("dedup: %w", err)
@@ -240,7 +244,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	}
 
 	// 7. Sort
-	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl, collision.Strategy(cfg.CollisionStrategy))
+	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, cfg.ClusterRawJPEG, fileNameTmpl, collision.Strategy(cfg.CollisionStrategy))
 	entries, err := srt.BuildTree(ctx, toProcess, dupResults, dr.Resolve, dateSources)
 	if err != nil {
 		return res, fmt.Errorf("sort: %w", err)

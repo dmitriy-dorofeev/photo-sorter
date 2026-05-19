@@ -36,15 +36,17 @@ type Sorter struct {
 	targetRoot        string
 	layout            string // например, "2006/01/02"
 	livePhotos        bool
+	rawJPEGClustering bool
 	fileNameTemplate  *renamer.Template
 	collisionStrategy collision.Strategy
 }
 
 // New создаёт новый Sorter.
 // livePhotos: если true, .MOV без даты получает дату от соответствующего .HEIC/.HEIF.
+// rawJPEGClustering: если true, RAW без даты получает дату от соответствующего JPEG.
 // fileNameTemplate может быть nil — тогда используется {original}{ext}.
 // collisionStrategy может быть пустой — тогда используется counter.
-func New(targetRoot, layout string, livePhotos bool, fileNameTemplate *renamer.Template, collisionStrategy collision.Strategy) *Sorter {
+func New(targetRoot, layout string, livePhotos bool, rawJPEGClustering bool, fileNameTemplate *renamer.Template, collisionStrategy collision.Strategy) *Sorter {
 	if fileNameTemplate == nil {
 		fileNameTemplate, _ = renamer.Parse("{original}{ext}")
 	}
@@ -55,6 +57,7 @@ func New(targetRoot, layout string, livePhotos bool, fileNameTemplate *renamer.T
 		targetRoot:        targetRoot,
 		layout:            layout,
 		livePhotos:        livePhotos,
+		rawJPEGClustering: rawJPEGClustering,
 		fileNameTemplate:  fileNameTemplate,
 		collisionStrategy: collisionStrategy,
 	}
@@ -81,7 +84,7 @@ func (s *Sorter) BuildTree(
 		}
 	}
 
-	// 2. Кеш дат + Live Photos pre-pass.
+	// 2. Кеш дат + Live Photos pre-pass + RAW+JPEG pre-pass.
 	type dateResult struct {
 		date       time.Time
 		ok         bool
@@ -90,6 +93,8 @@ func (s *Sorter) BuildTree(
 	dateCache := make(map[string]dateResult, len(files))
 	livePhotoDates := make(map[string]time.Time)
 	livePhotoSources := make(map[string]dateresolver.Source)
+	rawJPEGDates := make(map[string]time.Time)
+	rawJPEGSources := make(map[string]dateresolver.Source)
 
 	for _, f := range files {
 		if err := ctx.Err(); err != nil {
@@ -104,6 +109,14 @@ func (s *Sorter) BuildTree(
 				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
 				livePhotoDates[strings.ToLower(base)] = d
 				livePhotoSources[strings.ToLower(base)] = src
+			}
+		}
+		if ok && s.rawJPEGClustering {
+			ext := strings.ToLower(f.Ext)
+			if ext == ".jpg" || ext == ".jpeg" || ext == ".heic" || ext == ".heif" {
+				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
+				rawJPEGDates[strings.ToLower(base)] = d
+				rawJPEGSources[strings.ToLower(base)] = src
 			}
 		}
 	}
@@ -129,6 +142,20 @@ func (s *Sorter) BuildTree(
 					date = d
 					ok = true
 					res.dateSource = livePhotoSources[strings.ToLower(base)]
+				}
+			}
+		}
+
+		// RAW + JPEG fallback: RAW без даты получает дату от JPEG с тем же basename.
+		if !ok && s.rawJPEGClustering {
+			ext := strings.ToLower(f.Ext)
+			rawExts := map[string]bool{".cr2": true, ".nef": true, ".arw": true, ".dng": true, ".raf": true}
+			if rawExts[ext] {
+				base := strings.TrimSuffix(f.Name, filepath.Ext(f.Name))
+				if d, found := rawJPEGDates[strings.ToLower(base)]; found {
+					date = d
+					ok = true
+					res.dateSource = rawJPEGSources[strings.ToLower(base)]
 				}
 			}
 		}

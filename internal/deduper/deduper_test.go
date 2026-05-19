@@ -159,7 +159,7 @@ func TestFindDuplicates(t *testing.T) {
 			if tt.name == "live photos disabled treats as duplicates" {
 				livePhotos = false
 			}
-			d := New(tt.files, livePhotos, StrategyPath, nil, nil)
+			d := New(tt.files, livePhotos, true, StrategyPath, nil, nil)
 			got, _, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
@@ -190,7 +190,7 @@ func TestFindDuplicates_HashError(t *testing.T) {
 		{Path: noRead, Name: "secret.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true, StrategyPath, nil, nil)
+	d := New(files, true, true, StrategyPath, nil, nil)
 	results, _, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -213,7 +213,7 @@ func TestFindDuplicates_NamedPipe(t *testing.T) {
 		{Path: pipePath, Name: "pipe.bin", Size: 100},
 		{Path: testdata("dup_a.bin"), Name: "dup_a.bin", Size: 100},
 	}
-	d := New(files, true, StrategyPath, nil, nil)
+	d := New(files, true, true, StrategyPath, nil, nil)
 	results, _, err := d.FindDuplicates(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -270,7 +270,7 @@ func TestFindDuplicates_Strategies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := New(files, true, tt.strategy, tt.dateSources, nil)
+			d := New(files, true, true, tt.strategy, tt.dateSources, nil)
 			results, _, err := d.FindDuplicates(context.Background())
 			if err != nil {
 				t.Fatalf("FindDuplicates() error = %v", err)
@@ -288,6 +288,43 @@ func TestFindDuplicates_Strategies(t *testing.T) {
 	}
 }
 
+func TestFindDuplicates_RawJPEGClustering(t *testing.T) {
+	dir := t.TempDir()
+	content := []byte("same raw and jpeg content")
+	cr2 := filepath.Join(dir, "photo.CR2")
+	jpg := filepath.Join(dir, "photo.JPG")
+	os.WriteFile(cr2, content, 0644)
+	os.WriteFile(jpg, content, 0644)
+
+	files := []scanner.FileInfo{
+		{Path: cr2, Name: "photo.CR2", Ext: ".cr2", Size: int64(len(content))},
+		{Path: jpg, Name: "photo.JPG", Ext: ".jpg", Size: int64(len(content))},
+	}
+
+	// При clusterRawJPEG=true не должны считаться дубликатами.
+	d := New(files, true, true, StrategyPath, nil, nil)
+	results, _, err := d.FindDuplicates(context.Background())
+	if err != nil {
+		t.Fatalf("FindDuplicates() error = %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 duplicates with clusterRawJPEG=true, got %d", len(results))
+	}
+
+	// При clusterRawJPEG=false должны считаться дубликатами.
+	d = New(files, true, false, StrategyPath, nil, nil)
+	results, _, err = d.FindDuplicates(context.Background())
+	if err != nil {
+		t.Fatalf("FindDuplicates() error = %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 duplicate group with clusterRawJPEG=false, got %d", len(results))
+	}
+	if len(results[0].Duplicates) != 1 {
+		t.Errorf("expected 1 duplicate, got %d", len(results[0].Duplicates))
+	}
+}
+
 func BenchmarkFindDuplicates(b *testing.B) {
 	dir := b.TempDir()
 	var files []scanner.FileInfo
@@ -302,7 +339,7 @@ func BenchmarkFindDuplicates(b *testing.B) {
 			Size: int64(len(content)),
 		})
 	}
-	d := New(files, true, StrategyPath, nil, nil)
+	d := New(files, true, true, StrategyPath, nil, nil)
 	ctx := context.Background()
 
 	b.ResetTimer()

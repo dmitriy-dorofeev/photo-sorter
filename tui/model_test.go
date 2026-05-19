@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 14 {
-		t.Errorf("expected 14 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 15 {
+		t.Errorf("expected 15 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -46,41 +46,47 @@ func TestNewModel(t *testing.T) {
 	if m.settings.items[2].AsBool() != config.DefaultLivePhotos {
 		t.Errorf("expected default live_photos %v, got %v", config.DefaultLivePhotos, m.settings.items[2].AsBool())
 	}
-	if m.settings.items[5].key != "write_exif" {
-		t.Errorf("expected sixth setting key 'write_exif', got %s", m.settings.items[5].key)
+	if m.settings.items[3].key != "cluster_raw_jpeg" {
+		t.Errorf("expected fourth setting key 'cluster_raw_jpeg', got %s", m.settings.items[3].key)
 	}
-	if m.settings.items[5].AsBool() != config.DefaultWriteExif {
-		t.Errorf("expected default write_exif %v, got %v", config.DefaultWriteExif, m.settings.items[5].AsBool())
+	if m.settings.items[3].AsBool() != config.DefaultClusterRawJPEG {
+		t.Errorf("expected default cluster_raw_jpeg %v, got %v", config.DefaultClusterRawJPEG, m.settings.items[3].AsBool())
 	}
-	if m.settings.items[6].key != "write_spotlight" {
-		t.Errorf("expected seventh setting key 'write_spotlight', got %s", m.settings.items[6].key)
+	if m.settings.items[6].key != "write_exif" {
+		t.Errorf("expected seventh setting key 'write_exif', got %s", m.settings.items[6].key)
 	}
-	if m.settings.items[6].AsBool() != config.DefaultWriteSpotlight {
-		t.Errorf("expected default write_spotlight %v, got %v", config.DefaultWriteSpotlight, m.settings.items[6].AsBool())
+	if m.settings.items[6].AsBool() != config.DefaultWriteExif {
+		t.Errorf("expected default write_exif %v, got %v", config.DefaultWriteExif, m.settings.items[6].AsBool())
 	}
-	if m.settings.items[7].key != "notify" {
-		t.Errorf("expected eighth setting key 'notify', got %s", m.settings.items[7].key)
+	if m.settings.items[7].key != "write_spotlight" {
+		t.Errorf("expected eighth setting key 'write_spotlight', got %s", m.settings.items[7].key)
 	}
-	if m.settings.items[7].AsBool() != config.DefaultNotify {
-		t.Errorf("expected default notify %v, got %v", config.DefaultNotify, m.settings.items[7].AsBool())
+	if m.settings.items[7].AsBool() != config.DefaultWriteSpotlight {
+		t.Errorf("expected default write_spotlight %v, got %v", config.DefaultWriteSpotlight, m.settings.items[7].AsBool())
 	}
-	if m.settings.items[8].key != "skip_sorted" {
-		t.Errorf("expected ninth setting key 'skip_sorted', got %s", m.settings.items[8].key)
+	if m.settings.items[8].key != "notify" {
+		t.Errorf("expected ninth setting key 'notify', got %s", m.settings.items[8].key)
 	}
-	if !m.settings.items[8].AsBool() {
-		t.Errorf("expected default skip_sorted true, got %v", m.settings.items[8].AsBool())
+	if m.settings.items[8].AsBool() != config.DefaultNotify {
+		t.Errorf("expected default notify %v, got %v", config.DefaultNotify, m.settings.items[8].AsBool())
 	}
-	if m.settings.items[9].key != "dup_strategy" {
-		t.Errorf("expected tenth setting key 'dup_strategy', got %s", m.settings.items[9].key)
+	if m.settings.items[9].key != "skip_sorted" {
+		t.Errorf("expected tenth setting key 'skip_sorted', got %s", m.settings.items[9].key)
 	}
-	if m.settings.items[9].AsString() != config.DefaultDupStrategy {
-		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[9].AsString())
+	if !m.settings.items[9].AsBool() {
+		t.Errorf("expected default skip_sorted true, got %v", m.settings.items[9].AsBool())
 	}
-	if m.settings.items[10].key != "collision_strategy" {
-		t.Errorf("expected eleventh setting key 'collision_strategy', got %s", m.settings.items[10].key)
+	if m.settings.items[10].key != "dup_strategy" {
+		t.Errorf("expected eleventh setting key 'dup_strategy', got %s", m.settings.items[10].key)
 	}
-	if m.settings.items[10].AsString() != config.DefaultCollisionStrategy {
-		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[10].AsString())
+	if m.settings.items[10].AsString() != config.DefaultDupStrategy {
+		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[10].AsString())
+	}
+	if m.settings.items[11].key != "collision_strategy" {
+		t.Errorf("expected twelfth setting key 'collision_strategy', got %s", m.settings.items[11].key)
+	}
+	if m.settings.items[11].AsString() != config.DefaultCollisionStrategy {
+		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[11].AsString())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")
@@ -239,13 +245,13 @@ func TestSettings_WriteExif(t *testing.T) {
 		t.Error("expected write_exif to be false by default")
 	}
 
-	// Перемещаем курсор на write_exif (позиция 5)
-	m.settings.cursor = 5
+	// Перемещаем курсор на write_exif (позиция 6)
+	m.settings.cursor = 6
 
 	// Переключаем настройку
 	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
 	m = newM.(Model)
-	if m.settings.items[5].key != "write_exif" {
+	if m.settings.items[6].key != "write_exif" {
 		t.Fatalf("expected cursor on write_exif, got %s", m.settings.items[m.settings.cursor].key)
 	}
 	// Переключаем значение

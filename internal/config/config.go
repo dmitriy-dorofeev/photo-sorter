@@ -12,6 +12,9 @@ const (
 	// DefaultLivePhotos — группировать Live Photos по умолчанию.
 	DefaultLivePhotos = true
 
+	// DefaultClusterRawJPEG — группировать RAW + JPEG по умолчанию.
+	DefaultClusterRawJPEG = true
+
 	// DefaultIncludeVideo — обрабатывать видео по умолчанию.
 	DefaultIncludeVideo = true
 

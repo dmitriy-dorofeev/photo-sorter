@@ -74,6 +74,7 @@ func main() {
 		template          string
 		fileNameTemplate  string
 		livePhotos        bool
+		clusterRawJPEG    bool
 		includeVideo      bool
 		dryRun            bool
 		useMTime          bool
@@ -97,6 +98,7 @@ func main() {
 	flag.StringVar(&template, "template", config.DefaultTemplate, "Шаблон папок (Go time layout)")
 	flag.StringVar(&fileNameTemplate, "name-template", config.DefaultFileNameTemplate, "Шаблон имён файлов")
 	flag.BoolVar(&livePhotos, "live-photos", config.DefaultLivePhotos, "Группировать Live Photos")
+	flag.BoolVar(&clusterRawJPEG, "cluster-raw-jpeg", config.DefaultClusterRawJPEG, "Группировать RAW + JPEG")
 	flag.BoolVar(&includeVideo, "include-video", config.DefaultIncludeVideo, "Обрабатывать видео")
 	flag.BoolVar(&dryRun, "dry-run", true, "Пробный прогон без копирования")
 	flag.BoolVar(&useMTime, "use-mtime", config.DefaultUseMTime, "Fallback на дату изменения файла")
@@ -180,6 +182,7 @@ func main() {
 		Template:          template,
 		FileNameTemplate:  fileNameTemplate,
 		LivePhotos:        livePhotos,
+		ClusterRawJPEG:    clusterRawJPEG,
 		IncludeVideo:      includeVideo,
 		UseMTime:          useMTime,
 		DupStrategy:       dupStrategy,

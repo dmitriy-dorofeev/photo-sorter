@@ -190,6 +190,13 @@ func newSettingsModel() settingsModel {
 				stype:     settingTypeBool,
 			},
 			{
+				label:     "Группировать RAW + JPEG",
+				key:       "cluster_raw_jpeg",
+				help:      "Не считать .cr2/.nef/.arw/.dng/.raf + .jpg дубликатами; RAW без даты получает дату от JPEG",
+				boolValue: config.DefaultClusterRawJPEG,
+				stype:     settingTypeBool,
+			},
+			{
 				label:     "Включать видео",
 				key:       "include_video",
 				help:      "Обрабатывать видеофайлы",
