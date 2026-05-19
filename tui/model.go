@@ -20,6 +20,7 @@ type Screen int
 const (
 	ScreenSources Screen = iota
 	ScreenTarget
+	ScreenQuickStart
 	ScreenSettings
 	ScreenScan
 	ScreenPreview
@@ -37,11 +38,12 @@ type Model struct {
 	Target  string
 
 	// Экраны (внутренние модели)
-	sources  sourcesModel
-	target   targetModel
-	settings settingsModel
-	scan     scanModel
-	copy     copyModel
+	sources    sourcesModel
+	target     targetModel
+	quickStart quickStartModel
+	settings   settingsModel
+	scan       scanModel
+	copy       copyModel
 
 	// Результаты сканирования
 	files      []scanner.FileInfo
@@ -83,6 +85,7 @@ func NewModel(version string) Model {
 		version:      version,
 		sources:      newSourcesModel(),
 		target:       newTargetModel(),
+		quickStart:   newQuickStartModel(),
 		settings:     newSettingsModel(),
 		scan:         newScanModel(),
 		copy:         newCopyModel(),
@@ -130,6 +133,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sources.height = msg.Height
 		m.target.width = msg.Width
 		m.target.height = msg.Height
+		m.quickStart.width = msg.Width
+		m.quickStart.height = msg.Height
 		m.settings.width = msg.Width
 		m.settings.height = msg.Height
 		m.scan.width = msg.Width
@@ -144,6 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateSources(msg)
 	case ScreenTarget:
 		return m.updateTarget(msg)
+	case ScreenQuickStart:
+		return m.updateQuickStart(msg)
 	case ScreenSettings:
 		return m.updateSettings(msg)
 	case ScreenScan:
@@ -164,6 +171,8 @@ func (m Model) View() string {
 		return m.viewSources()
 	case ScreenTarget:
 		return m.viewTarget()
+	case ScreenQuickStart:
+		return m.viewQuickStart()
 	case ScreenSettings:
 		return m.viewSettings()
 	case ScreenScan:
@@ -195,6 +204,7 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.previewFileCache = nil
 	m.sources = newSourcesModel()
 	m.target = newTargetModel()
+	m.quickStart = newQuickStartModel()
 	m.settings = newSettingsModel()
 	m.scan = newScanModel()
 	m.copy = newCopyModel()

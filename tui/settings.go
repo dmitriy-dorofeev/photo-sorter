@@ -404,7 +404,7 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case tea.KeyLeft:
-			m.screen = ScreenTarget
+			m.screen = ScreenQuickStart
 			return m, nil
 
 		case tea.KeyRight:

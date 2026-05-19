@@ -63,7 +63,7 @@ func (m Model) updateTarget(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyRight:
 			if m.Target != "" {
-				m.screen = ScreenSettings
+				m.screen = ScreenQuickStart
 			}
 			return m, nil
 

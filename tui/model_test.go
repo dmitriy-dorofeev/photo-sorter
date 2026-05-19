@@ -127,11 +127,26 @@ func TestScreenTransitions(t *testing.T) {
 		t.Fatal("expected target to be selected")
 	}
 
-	// Move to settings screen
+	// Move to quick start screen
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m = newM.(Model)
+	if m.screen != ScreenQuickStart {
+		t.Errorf("expected screen QuickStart, got %d", m.screen)
+	}
+
+	// Move to settings screen from quick start
+	m.quickStart.cursor = 1
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = newM.(Model)
 	if m.screen != ScreenSettings {
 		t.Errorf("expected screen Settings, got %d", m.screen)
+	}
+
+	// Back to quick start
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = newM.(Model)
+	if m.screen != ScreenQuickStart {
+		t.Errorf("expected screen QuickStart after back, got %d", m.screen)
 	}
 
 	// Back to target
@@ -366,8 +381,8 @@ func TestTargetSelectCurrentDir(t *testing.T) {
 	// Проверяем что можно перейти дальше
 	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	m = newM.(Model)
-	if m.screen != ScreenSettings {
-		t.Errorf("expected screen Settings, got %d", m.screen)
+	if m.screen != ScreenQuickStart {
+		t.Errorf("expected screen QuickStart, got %d", m.screen)
 	}
 }
 
@@ -405,5 +420,89 @@ func TestTargetSelectCurrentDirAndCreate(t *testing.T) {
 	subPath := filepath.Join(tmp, "subfolder")
 	if info, err := os.Stat(subPath); err != nil || !info.IsDir() {
 		t.Error("expected subfolder to be created")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Тесты экрана быстрого старта (QuickStart)
+// ---------------------------------------------------------------------------
+
+func TestQuickStartScreen(t *testing.T) {
+	m := NewModel("test")
+	m.screen = ScreenQuickStart
+
+	if m.quickStart.cursor != 0 {
+		t.Errorf("expected quickStart cursor 0, got %d", m.quickStart.cursor)
+	}
+
+	// Переключение вниз
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newM.(Model)
+	if m.quickStart.cursor != 1 {
+		t.Errorf("expected quickStart cursor 1 after Down, got %d", m.quickStart.cursor)
+	}
+
+	// Переключение вниз — не выходит за границу
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = newM.(Model)
+	if m.quickStart.cursor != 1 {
+		t.Errorf("expected quickStart cursor to stay 1, got %d", m.quickStart.cursor)
+	}
+
+	// Переключение вверх
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = newM.(Model)
+	if m.quickStart.cursor != 0 {
+		t.Errorf("expected quickStart cursor 0 after Up, got %d", m.quickStart.cursor)
+	}
+
+	// Назад на Target
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = newM.(Model)
+	if m.screen != ScreenTarget {
+		t.Errorf("expected screen Target, got %d", m.screen)
+	}
+}
+
+func TestQuickStartToSettings(t *testing.T) {
+	m := NewModel("test")
+	m.screen = ScreenQuickStart
+	m.quickStart.cursor = 1
+
+	newM, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.screen != ScreenSettings {
+		t.Errorf("expected screen Settings, got %d", m.screen)
+	}
+
+	// Проверяем что ← возвращает на QuickStart
+	newM, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = newM.(Model)
+	if m.screen != ScreenQuickStart {
+		t.Errorf("expected screen QuickStart after back from Settings, got %d", m.screen)
+	}
+}
+
+func TestQuickStartToScan(t *testing.T) {
+	tmp := t.TempDir()
+	photos := filepath.Join(tmp, "photos")
+	mustMkdir(t, photos)
+
+	m := NewModel("test")
+	m.screen = ScreenQuickStart
+	m.Sources = []string{photos}
+	m.Target = tmp
+	m.quickStart.cursor = 0
+
+	newM, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = newM.(Model)
+	if m.screen != ScreenScan {
+		t.Errorf("expected screen Scan, got %d", m.screen)
+	}
+	if !m.scan.running {
+		t.Error("expected scan.running to be true")
+	}
+	if cmd == nil {
+		t.Error("expected non-nil command (scan start)")
 	}
 }
