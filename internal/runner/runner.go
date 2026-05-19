@@ -136,7 +136,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		} else {
 			toProcess, unchanged, err = st.Filter(files)
 			if err != nil {
-				st.Close()
+				_ = st.Close() // #nosec G104 — ошибка Filter важнее, закрываем state лучшей попыткой.
 				st = nil
 				toProcess = files
 			} else {

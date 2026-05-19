@@ -38,7 +38,7 @@ type State struct {
 // Open открывает (или создаёт) state-файл в целевой папке.
 func Open(targetDir string) (*State, error) {
 	dir := filepath.Join(targetDir, stateDirName)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, fmt.Errorf("create state dir: %w", err)
 	}
 	path := filepath.Join(dir, stateFileName)

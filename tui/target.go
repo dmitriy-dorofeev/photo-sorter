@@ -123,7 +123,7 @@ func (m Model) updateTargetCreating(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			newPath := filepath.Join(m.target.currentDir, name)
-			if err := os.MkdirAll(newPath, 0755); err != nil {
+			if err := os.MkdirAll(newPath, 0750); err != nil {
 				m.target.createErr = err.Error()
 				return m, nil
 			}

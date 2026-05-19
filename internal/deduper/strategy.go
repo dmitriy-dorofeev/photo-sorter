@@ -2,8 +2,6 @@
 package deduper
 
 import (
-	"sort"
-
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/scanner"
 )
@@ -120,15 +118,4 @@ func sourceFor(path string, dateSources map[string]dateresolver.Source) datereso
 		return s
 	}
 	return dateresolver.SourceNone
-}
-
-// sortedByPath возвращает копию слайса, отсортированную по пути.
-// Используется в тестах и при необходимости детерминированного обхода.
-func sortedByPath(files []scanner.FileInfo) []scanner.FileInfo {
-	out := make([]scanner.FileInfo, len(files))
-	copy(out, files)
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Path < out[j].Path
-	})
-	return out
 }

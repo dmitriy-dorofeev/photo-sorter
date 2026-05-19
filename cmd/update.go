@@ -190,6 +190,7 @@ func verifyChecksum(archivePath, checksumsURL, assetName string) error {
 }
 
 func fileSHA256(path string) (string, error) {
+	// #nosec G304 — путь передан из доверенного источника (временный файл загрузки).
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
@@ -228,6 +229,7 @@ func downloadFile(url, path string) error {
 		return fmt.Errorf("HTTP %s", resp.Status)
 	}
 
+	// #nosec G304 — путь — временный файл в контролируемой директории.
 	out, err := os.Create(path)
 	if err != nil {
 		return err
@@ -239,6 +241,7 @@ func downloadFile(url, path string) error {
 }
 
 func extractBinary(archivePath, destDir, binName string) (string, error) {
+	// #nosec G304 — путь — временный файл, созданный приложением.
 	f, err := os.Open(archivePath)
 	if err != nil {
 		return "", err
@@ -264,11 +267,17 @@ func extractBinary(archivePath, destDir, binName string) (string, error) {
 
 		if filepath.Base(hdr.Name) == binName {
 			outPath := filepath.Join(destDir, binName)
-			out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode)|0o111)
+			mode := os.FileMode(0o755)
+			if hdr.Mode >= 0 && hdr.Mode <= 0o7777 {
+				mode = os.FileMode(uint32(hdr.Mode))&os.ModePerm | 0o111
+			}
+			// #nosec G304 — путь формируется из destDir (временная директория) и контролируемого имени бинарника.
+			out, err := os.OpenFile(outPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 			if err != nil {
 				return "", err
 			}
-			_, copyErr := io.Copy(out, tr)
+			const maxExtractSize = 500 << 20 // 500 MB
+			_, copyErr := io.Copy(out, io.LimitReader(tr, maxExtractSize))
 			if err := out.Close(); err != nil {
 				return "", fmt.Errorf("закрытие файла: %w", err)
 			}
@@ -309,6 +318,7 @@ func replaceExecutable(newBin string) error {
 	}
 	tmpPath := tmpFile.Name()
 
+	// #nosec G304 — путь — временный файл, извлечённый из доверенного архива.
 	src, err := os.Open(newBin)
 	if err != nil {
 		closeSilent(tmpFile)
@@ -336,6 +346,7 @@ func replaceExecutable(newBin string) error {
 		return fmt.Errorf("замена: %w", err)
 	}
 
+	// #nosec G302 — исполняемый бинарник требует прав на запуск.
 	if err := os.Chmod(execPath, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Предупреждение: не удалось установить права: %v\n", err)
 	}

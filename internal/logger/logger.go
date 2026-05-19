@@ -17,6 +17,7 @@ type Logger struct {
 
 // New создаёт новый Logger, записывающий в указанный файл.
 func New(path string) (*Logger, error) {
+	// #nosec G304 — путь формируется внутри приложения (целевая директория + фиксированное имя).
 	f, err := os.Create(path)
 	if err != nil {
 		return nil, err

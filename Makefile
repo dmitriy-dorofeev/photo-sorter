@@ -1,4 +1,4 @@
-.PHONY: build clean test snapshot build-mac-app
+.PHONY: build clean test snapshot build-mac-app tools-ci fmt-check ci-check
 
 # Версия берётся из последнего git-тега или короткого хеша коммита.
 # Если рабочая директория "грязная" — добавляется суффикс -dirty.
@@ -14,6 +14,30 @@ clean:
 
 test:
 	go test ./...
+
+# Установка тех же версий анализаторов, что используются в CI.
+tools-ci:
+	go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+	go install github.com/securego/gosec/v2/cmd/gosec@v2.22.5
+
+# Проверка, что в репозитории нет неотформатированных Go-файлов.
+fmt-check:
+	@unformatted=$$(gofmt -l .); \
+	if [ -n "$$unformatted" ]; then \
+		echo "Найдены неотформатированные файлы:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
+
+# Локальный прогон проверок уровня CI.
+ci-check: fmt-check tools-ci
+	@PATH="$$(go env GOPATH)/bin:$$PATH" go vet ./...
+	@PATH="$$(go env GOPATH)/bin:$$PATH" staticcheck ./...
+	@PATH="$$(go env GOPATH)/bin:$$PATH" govulncheck ./...
+	@PATH="$$(go env GOPATH)/bin:$$PATH" gosec -exclude=G404 ./...
+	go test ./...
+	go build -o photo-sorter ./cmd
 
 # Локальная сборка "снимка" (snapshot) через GoReleaser без публикации релиза.
 # Требует установленного goreleaser: https://goreleaser.com/install/

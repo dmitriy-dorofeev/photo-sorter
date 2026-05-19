@@ -57,6 +57,7 @@ func generateText(targetDir string, data Data) (string, error) {
 	name := data.Timestamp.Format("2006-01-02_15-04-05") + "_photo-sorter.log"
 	path := filepath.Join(targetDir, name)
 
+	// #nosec G304 — имя файла формируется из timestamp внутри приложения.
 	f, err := os.Create(path)
 	if err != nil {
 		return "", err
@@ -106,6 +107,7 @@ func generateHTML(targetDir string, data Data) (string, error) {
 	name := data.Timestamp.Format("2006-01-02_15-04-05") + "_photo-sorter.html"
 	path := filepath.Join(targetDir, name)
 
+	// #nosec G304 — имя файла формируется из timestamp внутри приложения.
 	f, err := os.Create(path)
 	if err != nil {
 		return "", err

@@ -29,6 +29,7 @@ func writeExifDate(ctx context.Context, exifToolPath, targetPath string, date ti
 		exifToolPath = "exiftool"
 	}
 	dateStr := date.Format("2006:01:02 15:04:05")
+	// #nosec G204 — targetPath является результатом внутренней сортировки, dateStr форматируется контролируемым образом.
 	cmd := exec.CommandContext(ctx, exifToolPath,
 		"-DateTimeOriginal="+dateStr,
 		"-overwrite_original",

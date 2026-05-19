@@ -23,6 +23,7 @@ func HashFile(ctx context.Context, path string) (uint64, error) {
 		return 0, fmt.Errorf("not a regular file: %s", path)
 	}
 
+	// #nosec G304 — путь проходит валидацию в scanner и sorter перед вызовом.
 	f, err := os.Open(path)
 	if err != nil {
 		return 0, err

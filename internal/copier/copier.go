@@ -211,6 +211,7 @@ func (c *Copier) Copy(
 // syncDir вызывает fsync на директории, гарантируя сброс
 // метаданных файловой системы на диск.
 func syncDir(path string) error {
+	// #nosec G304 — путь — целевая директория, сформированная внутри приложения.
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -270,10 +271,13 @@ func (c *Copier) checkDiskSpace(entries []sorter.Entry) error {
 	if c.dryRun {
 		return nil
 	}
-	var needed int64
+	var needed uint64
 	for _, e := range entries {
 		if !e.Skip {
-			needed += e.Source.Size
+			if e.Source.Size >= 0 {
+				// #nosec G115 — Size возвращается os.FileInfo и не может быть отрицательным для обычных файлов.
+				needed += uint64(e.Source.Size)
+			}
 		}
 	}
 	if needed == 0 {
@@ -283,7 +287,7 @@ func (c *Copier) checkDiskSpace(entries []sorter.Entry) error {
 	if err != nil {
 		return fmt.Errorf("cannot check disk space: %w", err)
 	}
-	if available < uint64(needed) {
+	if available < needed {
 		return fmt.Errorf("not enough disk space: need %d bytes, have %d bytes", needed, available)
 	}
 	return nil
@@ -351,6 +355,7 @@ func (c *Copier) copyFile(ctx context.Context, src, dst string) error {
 	if hashFunc == nil {
 		hashFunc = hasher.HashFile
 	}
+	// #nosec G304 — src — путь из scanner.FileInfo, проверенный перед копированием.
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return err
