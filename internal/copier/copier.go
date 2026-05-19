@@ -308,6 +308,7 @@ func availableSpace(path string) (uint64, error) {
 			return 0, err
 		}
 	}
+	// #nosec G115 — Bsize (размер блока файловой системы) не может быть отрицательным.
 	return stat.Bavail * uint64(stat.Bsize), nil
 }
 
