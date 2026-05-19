@@ -201,3 +201,31 @@ echo '[{"SourceFile":"'$3'"}]'
 		t.Fatalf("got %v, want %v (mtime fallback)", got, want)
 	}
 }
+
+func TestParseExifDate_VariousLayouts(t *testing.T) {
+	tests := []struct {
+		input string
+		want  time.Time
+		ok    bool
+	}{
+		{"2024:06:15 10:20:30", time.Date(2024, 6, 15, 10, 20, 30, 0, time.UTC), true},
+		{"2024:06:15 10:20:30+05:00", time.Date(2024, 6, 15, 10, 20, 30, 0, time.FixedZone("", 5*60*60)), true},
+		{"2024:06:15 10:20:30.123", time.Date(2024, 6, 15, 10, 20, 30, 123000000, time.UTC), true},
+		{"2024:06:15 10:20:30.123-07:00", time.Date(2024, 6, 15, 10, 20, 30, 123000000, time.FixedZone("", -7*60*60)), true},
+		{"2024:06:15 10:20:30Z", time.Date(2024, 6, 15, 10, 20, 30, 0, time.UTC), true},
+		{"invalid", time.Time{}, false},
+		{"", time.Time{}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, ok := parseExifDate(tt.input)
+			if ok != tt.ok {
+				t.Fatalf("parseExifDate(%q) ok=%v, want %v", tt.input, ok, tt.ok)
+			}
+			if tt.ok && !got.Equal(tt.want) {
+				t.Errorf("parseExifDate(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}

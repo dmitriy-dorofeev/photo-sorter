@@ -5,6 +5,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -79,7 +80,7 @@ func (r Result) Stats() ResultStats {
 func Run(ctx context.Context, cfg Config, progress func(stage string, current, total int)) (res Result, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("panic in pipeline: %v", r)
+			err = fmt.Errorf("panic in pipeline: %v\n%s", r, debug.Stack())
 		}
 	}()
 
@@ -238,7 +239,10 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	// 7. Sort
 	srt := sorter.New(cfg.Target, cfg.Template, cfg.LivePhotos, fileNameTmpl, collision.Strategy(cfg.CollisionStrategy))
-	entries := srt.BuildTree(ctx, toProcess, dupResults, dr.Resolve, dateSources)
+	entries, err := srt.BuildTree(ctx, toProcess, dupResults, dr.Resolve, dateSources)
+	if err != nil {
+		return res, fmt.Errorf("sort: %w", err)
+	}
 
 	// Помечаем межзапусковые дубликаты как Skip.
 	for i := range entries {

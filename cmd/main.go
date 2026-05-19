@@ -302,10 +302,35 @@ func runCLI(cfg runner.Config, dryRun bool, format, reportFormat string, notifyF
 		return err
 	}
 
+	// Гарантируем закрытие state при выходе из функции.
+	if res.State != nil {
+		defer func() {
+			_ = res.State.Close()
+		}()
+	}
+
 	c := copier.New(dryRun, cfg.Target, collision.Strategy(cfg.CollisionStrategy))
 	c.WriteExif = cfg.WriteExif
 	c.ExifToolPath = cfg.ExifToolPath
 	stats, err := c.Copy(ctx, res.Entries, nil)
+
+	// Обновляем state после копирования (даже при частичной ошибке).
+	if res.State != nil {
+		records := make([]state.Record, 0, len(res.Entries))
+		for _, e := range res.Entries {
+			records = append(records, state.Record{
+				SourcePath: e.Source.Path,
+				Size:       e.Source.Size,
+				ModTime:    e.Source.ModTime,
+				FastHash:   res.FastHashes[e.Source.Path],
+				FullHash:   res.FullHashes[e.Source.Path],
+				TargetPath: e.Target,
+			})
+		}
+		_ = res.State.Update(records)
+		_ = res.State.Cleanup(res.AllPaths)
+	}
+
 	if err != nil {
 		// Выводим частичную статистику перед возвратом ошибки
 		if format == "json" {

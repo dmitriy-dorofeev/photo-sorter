@@ -27,7 +27,10 @@ func buildTreeAndCountUnsorted(t *testing.T, targetDir string, files []scanner.F
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolve, nil)
+	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 
 	unsortedCount := 0
 	for _, e := range entries {
@@ -165,7 +168,10 @@ func TestEndToEnd(t *testing.T) {
 
 	// 4. Build tree
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
+	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != len(files) {
 		t.Fatalf("expected %d entries, got %d", len(files), len(entries))
 	}
@@ -433,8 +439,10 @@ echo '[{"SourceFile":"'$3'","CreateDate":"2023:07:07 07:07:07"}]'
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
-
+	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -468,7 +476,10 @@ func TestCancellation(t *testing.T) {
 		t.Fatalf("dedup failed: %v", err)
 	}
 	sort := sorter.New(targetDir, "2006/01/02", true, nil, collision.StrategyCounter)
-	entries := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
+	entries, err := sort.BuildTree(context.Background(), files, dupResults, resolver.Resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	c := copier.New(false, targetDir, collision.StrategyCounter)

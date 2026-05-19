@@ -114,6 +114,15 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, []string, error
 				continue
 			}
 
+			// Межзапусковая дедупликация: если хеш группы есть в knownHashes,
+			// все файлы в группе считаются дубликатами уже скопированного файла.
+			if _, known := d.knownHashes[hashGroup[0].hash]; known {
+				for _, fh := range hashGroup {
+					crossRunDups = append(crossRunDups, fh.info.Path)
+				}
+				continue
+			}
+
 			infos := make([]scanner.FileInfo, len(hashGroup))
 			for i, fh := range hashGroup {
 				infos[i] = fh.info
@@ -128,11 +137,6 @@ func (d *Deduper) FindDuplicates(ctx context.Context) ([]Result, []string, error
 					continue
 				}
 				if d.livePhotos && isLivePhotoPair(original, candidate) {
-					continue
-				}
-				// Межзапусковая дедупликация: если хеш есть в knownHashes — дубликат.
-				if _, known := d.knownHashes[fh.hash]; known {
-					crossRunDups = append(crossRunDups, candidate.Path)
 					continue
 				}
 				duplicates = append(duplicates, candidate)

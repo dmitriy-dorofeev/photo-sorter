@@ -9,6 +9,24 @@ import (
 	"photo-sorter/internal/scanner"
 )
 
+// parseExifDate пытается распарсить строку даты из exiftool
+// с учётом различных форматов: с/без timezone, с/без субсекунд.
+func parseExifDate(s string) (time.Time, bool) {
+	layouts := []string{
+		"2006:01:02 15:04:05",
+		"2006:01:02 15:04:05-07:00",
+		"2006:01:02 15:04:05.000",
+		"2006:01:02 15:04:05.000-07:00",
+		"2006:01:02 15:04:05Z",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // videoTimeout используется в extractVideoDate и extractVideoDates.
 // Переопределяется в тестах для ускорения.
 var videoTimeout = 30 * time.Second
@@ -56,7 +74,7 @@ func extractVideoDate(ctx context.Context, path, exifToolPath string) (time.Time
 
 	for _, key := range []string{"DateTimeOriginal", "CreateDate", "MediaCreateDate"} {
 		if v, ok := meta[key].(string); ok && v != "" {
-			if t, err := time.Parse("2006:01:02 15:04:05", v); err == nil {
+			if t, ok := parseExifDate(v); ok {
 				return t, true
 			}
 		}

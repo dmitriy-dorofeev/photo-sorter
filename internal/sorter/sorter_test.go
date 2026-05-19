@@ -28,7 +28,10 @@ func TestBuildTree_Basic(t *testing.T) {
 		return date(2024, 3, 15), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}
@@ -48,7 +51,10 @@ func TestBuildTree_Unsorted(t *testing.T) {
 		return time.Time{}, false
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	want := filepath.Join("/target", UnsortedDir, "unknown.bin")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -73,7 +79,10 @@ func TestBuildTree_SkipDuplicates(t *testing.T) {
 		},
 	}
 
-	entries := s.BuildTree(context.Background(), files, dups, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, dups, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -96,7 +105,10 @@ func TestBuildTree_NameCollision(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -122,7 +134,10 @@ func buildLivePhotoEntries(t *testing.T, livePhotos bool) []Entry {
 		return time.Time{}, false // .MOV без даты
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -164,7 +179,10 @@ func TestBuildTree_WithFileNameTemplate(t *testing.T) {
 		return date(2024, 3, 15), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	want := filepath.Join("/target", "2024", "03", "15", "2024-03-15_a.jpg")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -182,7 +200,10 @@ func TestBuildTree_TemplatePreservesExtension(t *testing.T) {
 		return date(2024, 3, 15), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	want := filepath.Join("/target", "2024", "03", "15", "photo.JPG")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -201,7 +222,10 @@ func TestBuildTree_CollisionWithTemplate(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -228,7 +252,10 @@ func TestBuildTree_CollisionTemplateSeq(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
@@ -255,7 +282,10 @@ func TestBuildTree_UnsortedWithTemplate(t *testing.T) {
 		return time.Time{}, false
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	want := filepath.Join("/target", UnsortedDir, "0000-00-00_unknown.jpg")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -277,7 +307,10 @@ func TestBuildTree_LivePhotosDevicePropagation(t *testing.T) {
 		return time.Time{}, false
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -302,7 +335,10 @@ func TestBuildTree_DeviceInTemplate(t *testing.T) {
 		return date(2024, 3, 15), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	want := filepath.Join("/target", "2024", "03", "15", "Pixel", "2024", "PXL_123.jpg")
 	if entries[0].Target != want {
 		t.Errorf("target = %q, want %q", entries[0].Target, want)
@@ -320,7 +356,10 @@ func TestBuildTree_NameCollisionHash(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -353,7 +392,10 @@ func TestBuildTree_NameCollisionHashFallback(t *testing.T) {
 		return date(2024, 1, 1), true
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, nil)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 3 {
 		t.Fatalf("expected 3 entries, got %d", len(entries))
 	}
@@ -383,7 +425,10 @@ func TestBuildTree_DateSource(t *testing.T) {
 		"/src/b.jpg": dateresolver.SourceFilename,
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -414,7 +459,10 @@ func TestBuildTree_LivePhotos_DateSource(t *testing.T) {
 		"/src/IMG_1234.MOV":  dateresolver.SourceNone,
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(entries))
 	}
@@ -440,7 +488,10 @@ func TestBuildTree_DateSource_None(t *testing.T) {
 		"/src/unknown.bin": dateresolver.SourceNone,
 	}
 
-	entries := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	entries, err := s.BuildTree(context.Background(), files, nil, resolve, dateSources)
+	if err != nil {
+		t.Fatalf("BuildTree failed: %v", err)
+	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}

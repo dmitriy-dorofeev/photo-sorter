@@ -72,7 +72,7 @@ func (s *Sorter) BuildTree(
 	duplicates []deduper.Result,
 	resolveDate func(context.Context, scanner.FileInfo) (time.Time, bool),
 	dateSources map[string]dateresolver.Source,
-) []Entry {
+) ([]Entry, error) {
 	// 1. Множество путей-дубликатов.
 	dupPaths := make(map[string]struct{})
 	for _, r := range duplicates {
@@ -92,8 +92,8 @@ func (s *Sorter) BuildTree(
 	livePhotoSources := make(map[string]dateresolver.Source)
 
 	for _, f := range files {
-		if ctx.Err() != nil {
-			break
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		d, ok := resolveDate(ctx, f)
 		src := dateSources[f.Path]
@@ -114,8 +114,8 @@ func (s *Sorter) BuildTree(
 	seqCounts := make(map[string]int)    // счётчик {seq} внутри каждой директории
 
 	for _, f := range files {
-		if ctx.Err() != nil {
-			break
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
 		res := dateCache[f.Path]
 		date, ok := res.date, res.ok
@@ -171,5 +171,5 @@ func (s *Sorter) BuildTree(
 		entries = append(entries, entry)
 	}
 
-	return entries
+	return entries, nil
 }
