@@ -30,13 +30,13 @@ func updateNotice(m Model) string {
 	res := *m.updateResult
 
 	if res.IsDirty {
-		return errorStyle.Render("⚠ Версия собрана из 'грязного' дерева — обновление невозможно") + "\n" +
-			helpStyle.Render("  Скачайте релиз вручную с GitHub")
+		return m.theme.Error.Render("⚠ Версия собрана из 'грязного' дерева — обновление невозможно") + "\n" +
+			m.theme.Help.Render("  Скачайте релиз вручную с GitHub")
 	}
 
 	if res.IsDev {
-		return subtitleStyle.Render("Версия dev — обновления недоступны") + "\n" +
-			helpStyle.Render("  Скачайте релиз вручную с GitHub")
+		return m.theme.Subtitle.Render("Версия dev — обновления недоступны") + "\n" +
+			m.theme.Help.Render("  Скачайте релиз вручную с GitHub")
 	}
 
 	if res.Error != nil {
@@ -44,8 +44,8 @@ func updateNotice(m Model) string {
 	}
 
 	if res.HasUpdate {
-		return successStyle.Render(fmt.Sprintf("⬆ Доступно обновление: %s → %s", m.version, res.Latest)) + "\n" +
-			helpStyle.Render("  Выполните 'photo-sorter update' для установки")
+		return m.theme.Success.Render(fmt.Sprintf("⬆ Доступно обновление: %s → %s", m.version, res.Latest)) + "\n" +
+			m.theme.Help.Render("  Выполните 'photo-sorter update' для установки")
 	}
 
 	return ""

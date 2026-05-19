@@ -209,17 +209,17 @@ func (m Model) logCopyResult() Model {
 func (m Model) viewCopy() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 6. Копирование файлов"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 6. Копирование файлов"))
 	b.WriteString("\n\n")
 
 	if m.copy.errMsg != "" {
-		b.WriteString(errorStyle.Render("Ошибка: "+m.copy.errMsg) + "\n\n")
+		b.WriteString(m.theme.Error.Render("Ошибка: "+m.copy.errMsg) + "\n\n")
 		if m.copy.logErr != "" {
-			b.WriteString(errorStyle.Render("⚠ "+m.copy.logErr) + "\n\n")
+			b.WriteString(m.theme.Error.Render("⚠ "+m.copy.logErr) + "\n\n")
 		}
-		b.WriteString(helpStyle.Render("enter — начать заново • esc — выход"))
+		b.WriteString(m.theme.Help.Render("enter — начать заново • esc — выход"))
 		return b.String()
 	}
 
@@ -239,15 +239,15 @@ func (m Model) viewCopy() string {
 	if m.copy.running {
 		b.WriteString(fmt.Sprintf("Обработано %d из %d…\n", m.copy.current, m.copy.total))
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("esc — отмена"))
+		b.WriteString(m.theme.Help.Render("esc — отмена"))
 	} else if m.copy.done {
-		b.WriteString(successStyle.Render("✓ Копирование завершено!"))
+		b.WriteString(m.theme.Success.Render("✓ Копирование завершено!"))
 		b.WriteString("\n\n")
 		if m.copy.reportMsg != "" {
-			b.WriteString(successStyle.Render("📝 "+m.copy.reportMsg) + "\n\n")
+			b.WriteString(m.theme.Success.Render("📝 "+m.copy.reportMsg) + "\n\n")
 		}
 		if m.copy.logErr != "" {
-			b.WriteString(errorStyle.Render("⚠ "+m.copy.logErr) + "\n\n")
+			b.WriteString(m.theme.Error.Render("⚠ "+m.copy.logErr) + "\n\n")
 		}
 		b.WriteString(fmt.Sprintf("Скопировано: %d\n", m.copy.stats.Copied))
 		b.WriteString(fmt.Sprintf("Пропущено (дубли): %d\n", m.copy.stats.Skipped))
@@ -256,13 +256,13 @@ func (m Model) viewCopy() string {
 			b.WriteString(fmt.Sprintf("EXIF записан: %d\n", m.copy.stats.ExifWrites))
 		}
 		if m.copy.stats.ExifFailures > 0 {
-			b.WriteString(errorStyle.Render(fmt.Sprintf("Ошибок EXIF: %d", m.copy.stats.ExifFailures)) + "\n")
+			b.WriteString(m.theme.Error.Render(fmt.Sprintf("Ошибок EXIF: %d", m.copy.stats.ExifFailures)) + "\n")
 		}
 		if m.copy.stats.IntegrityFailures > 0 {
-			b.WriteString(errorStyle.Render(fmt.Sprintf("Ошибок целостности: %d", m.copy.stats.IntegrityFailures)) + "\n")
+			b.WriteString(m.theme.Error.Render(fmt.Sprintf("Ошибок целостности: %d", m.copy.stats.IntegrityFailures)) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("enter — начать заново • esc — выход"))
+		b.WriteString(m.theme.Help.Render("enter — начать заново • esc — выход"))
 	}
 
 	return b.String()

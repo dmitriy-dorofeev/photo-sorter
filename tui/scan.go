@@ -268,14 +268,14 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewScan() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 4. Сканирование файлов"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 4. Сканирование файлов"))
 	b.WriteString("\n\n")
 
 	if m.scan.errMsg != "" {
-		b.WriteString(errorStyle.Render("Ошибка: "+m.scan.errMsg) + "\n\n")
-		b.WriteString(helpStyle.Render("enter — попробовать снова • esc — выход"))
+		b.WriteString(m.theme.Error.Render("Ошибка: "+m.scan.errMsg) + "\n\n")
+		b.WriteString(m.theme.Help.Render("enter — попробовать снова • esc — выход"))
 		return b.String()
 	}
 
@@ -292,16 +292,16 @@ func (m Model) viewScan() string {
 	if m.scan.done {
 		st := m.computeScanStats()
 		b.WriteString("\n")
-		b.WriteString(successStyle.Render("✓ Сканирование завершено!"))
+		b.WriteString(m.theme.Success.Render("✓ Сканирование завершено!"))
 		b.WriteString("\n\n")
 		b.WriteString(fmt.Sprintf("Найдено файлов: %d\n", st.total))
 		b.WriteString(fmt.Sprintf("Определено дат: %d\n", st.withDate))
 		b.WriteString(fmt.Sprintf("Без даты (unsorted): %d\n", st.unsorted))
 		b.WriteString(fmt.Sprintf("Дубликатов: %d\n", st.duplicates))
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("enter — предпросмотр • ← — назад • esc — выход"))
+		b.WriteString(m.theme.Help.Render("enter — предпросмотр • ← — назад • esc — выход"))
 	} else if m.scan.running {
-		b.WriteString(helpStyle.Render("← — назад • esc — отмена"))
+		b.WriteString(m.theme.Help.Render("← — назад • esc — отмена"))
 	}
 
 	return b.String()

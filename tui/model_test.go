@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 12 {
-		t.Errorf("expected 12 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 13 {
+		t.Errorf("expected 13 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -78,6 +78,9 @@ func TestNewModel(t *testing.T) {
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")
+	}
+	if m.theme == nil {
+		t.Error("expected theme to be initialized")
 	}
 }
 

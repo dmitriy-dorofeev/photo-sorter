@@ -161,13 +161,13 @@ func (m Model) updateTargetCreating(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewTarget() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 2. Выбор целевой папки"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 2. Выбор целевой папки"))
 	b.WriteString("\n\n")
 
 	// ── Выбранные источники (read-only) ──
-	b.WriteString(highlightStyle.Render("Источники: "))
+	b.WriteString(m.theme.Highlight.Render("Источники: "))
 	if len(m.Sources) == 0 {
 		b.WriteString("(не выбрано)\n")
 	} else {
@@ -176,18 +176,18 @@ func (m Model) viewTarget() string {
 	b.WriteString("\n")
 
 	// ── Блок выбора цели ──
-	b.WriteString(highlightStyle.Render("Текущая папка: "))
+	b.WriteString(m.theme.Highlight.Render("Текущая папка: "))
 	b.WriteString(m.target.currentDir)
 	b.WriteString("\n\n")
 
 	// Список папок
 	if m.target.readErr != "" {
-		b.WriteString(errorStyle.Render("  Ошибка чтения: "+m.target.readErr) + "\n")
+		b.WriteString(m.theme.Error.Render("  Ошибка чтения: "+m.target.readErr) + "\n")
 	} else {
 		for i, item := range m.target.items {
 			cursor := "  "
 			if m.target.cursor == i {
-				cursor = highlightStyle.Render("▸ ")
+				cursor = m.theme.Highlight.Render("▸ ")
 			}
 
 			icon := "📁"
@@ -199,14 +199,14 @@ func (m Model) viewTarget() string {
 		}
 
 		if len(m.target.items) == 0 {
-			b.WriteString(errorStyle.Render("  (папка пуста)\n"))
+			b.WriteString(m.theme.Error.Render("  (папка пуста)\n"))
 		}
 	}
 
 	b.WriteString("\n")
 
 	// ── Выбранная цель ──
-	b.WriteString(highlightStyle.Render("Цель: "))
+	b.WriteString(m.theme.Highlight.Render("Цель: "))
 	if m.Target == "" {
 		b.WriteString("(не выбрано)\n")
 	} else {
@@ -217,22 +217,22 @@ func (m Model) viewTarget() string {
 
 	// Режим создания новой папки
 	if m.target.creating {
-		b.WriteString(highlightStyle.Render("Имя новой папки:") + "\n")
+		b.WriteString(m.theme.Highlight.Render("Имя новой папки:") + "\n")
 		b.WriteString(m.target.input.View() + "\n")
 		if m.target.createErr != "" {
-			b.WriteString(errorStyle.Render("  Ошибка: "+m.target.createErr) + "\n")
+			b.WriteString(m.theme.Error.Render("  Ошибка: "+m.target.createErr) + "\n")
 		}
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("enter — создать • esc — отмена"))
+		b.WriteString(m.theme.Help.Render("enter — создать • esc — отмена"))
 		return b.String()
 	}
 
-	nextHint := helpStyle.Render("→ — продолжить »")
+	nextHint := m.theme.Help.Render("→ — продолжить »")
 	if m.Target == "" {
-		nextHint = helpStyle.Render("→ — продолжить (выберите целевую папку)")
+		nextHint = m.theme.Help.Render("→ — продолжить (выберите целевую папку)")
 	}
 
-	b.WriteString(helpStyle.Render(
+	b.WriteString(m.theme.Help.Render(
 		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел/t — выбрать цель • c — выбрать текущую • n — новая папка • ← — назад • → — продолжить • esc — выход",
 	))
 	b.WriteString("\n")

@@ -104,9 +104,9 @@ func (m Model) updateSources(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewSources() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 1. Выбор источника"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 1. Выбор источника"))
 	b.WriteString("\n")
 	if notice := updateNotice(m); notice != "" {
 		b.WriteString(notice)
@@ -115,18 +115,18 @@ func (m Model) viewSources() string {
 	b.WriteString("\n")
 
 	// ── Блок выбора ──
-	b.WriteString(highlightStyle.Render("Текущая папка: "))
+	b.WriteString(m.theme.Highlight.Render("Текущая папка: "))
 	b.WriteString(m.sources.currentDir)
 	b.WriteString("\n\n")
 
 	// Список папок
 	if m.sources.readErr != "" {
-		b.WriteString(errorStyle.Render("  Ошибка чтения: "+m.sources.readErr) + "\n")
+		b.WriteString(m.theme.Error.Render("  Ошибка чтения: "+m.sources.readErr) + "\n")
 	} else {
 		for i, item := range m.sources.items {
 			cursor := "  "
 			if m.sources.cursor == i {
-				cursor = highlightStyle.Render("▸ ")
+				cursor = m.theme.Highlight.Render("▸ ")
 			}
 
 			icon := "📁"
@@ -136,21 +136,21 @@ func (m Model) viewSources() string {
 
 			check := "  "
 			if _, ok := m.sources.selected[filepath.Clean(item.path)]; ok {
-				check = successStyle.Render("✓ ")
+				check = m.theme.Success.Render("✓ ")
 			}
 
 			b.WriteString(fmt.Sprintf("%s%s%s %s\n", cursor, check, icon, item.name))
 		}
 
 		if len(m.sources.items) == 0 {
-			b.WriteString(errorStyle.Render("  (папка пуста)\n"))
+			b.WriteString(m.theme.Error.Render("  (папка пуста)\n"))
 		}
 	}
 
 	b.WriteString("\n")
 
 	// ── Блок выбранных источников ──
-	b.WriteString(highlightStyle.Render("Источники: "))
+	b.WriteString(m.theme.Highlight.Render("Источники: "))
 	if len(m.Sources) == 0 {
 		b.WriteString("(не выбрано)\n")
 	} else {
@@ -165,12 +165,12 @@ func (m Model) viewSources() string {
 
 	b.WriteString("\n")
 
-	nextHint := helpStyle.Render("→ — продолжить »")
+	nextHint := m.theme.Help.Render("→ — продолжить »")
 	if len(m.Sources) == 0 {
-		nextHint = helpStyle.Render("→ — продолжить (выберите хотя бы один источник)")
+		nextHint = m.theme.Help.Render("→ — продолжить (выберите хотя бы один источник)")
 	}
 
-	b.WriteString(helpStyle.Render(
+	b.WriteString(m.theme.Help.Render(
 		"↑/↓ — выбрать • enter — открыть • backspace — вверх • пробел — выбрать/убрать • → — продолжить • esc — выход",
 	))
 	b.WriteString("\n")

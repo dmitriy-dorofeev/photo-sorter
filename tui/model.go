@@ -76,6 +76,9 @@ type Model struct {
 
 	// Доступность exiftool
 	exifToolPath string
+
+	// Тема оформления
+	theme *Theme
 }
 
 // NewModel создаёт новую модель, начиная с экрана выбора источников.
@@ -91,6 +94,7 @@ func NewModel(version string) Model {
 		copy:         newCopyModel(),
 		copyProgress: new(atomic.Int64),
 		copyTotal:    new(atomic.Int64),
+		theme:        NewLightTheme(),
 	}
 }
 
@@ -99,6 +103,7 @@ func (m Model) Init() tea.Cmd {
 		m.sources.Init(),
 		checkUpdateCmd(m.version),
 		checkExifToolCmd(),
+		detectThemeCmd(),
 	)
 }
 
@@ -125,6 +130,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !msg.ok {
 			m.exifToolPath = ""
 		}
+		return m, nil
+	case themeMsg:
+		m.applyThemeMode(msg.mode)
 		return m, nil
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -182,7 +190,7 @@ func (m Model) View() string {
 	case ScreenCopy:
 		return m.viewCopy()
 	default:
-		return errorStyle.Render("Неизвестный экран. Нажмите любую клавишу для выхода.")
+		return m.theme.Error.Render("Неизвестный экран. Нажмите любую клавишу для выхода.")
 	}
 }
 
@@ -211,4 +219,20 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.copyProgress = new(atomic.Int64)
 	m.copyTotal = new(atomic.Int64)
 	return m, nil
+}
+
+// applyThemeMode применяет тему в зависимости от режима.
+func (m *Model) applyThemeMode(mode ThemeMode) {
+	switch mode {
+	case ThemeModeDark:
+		m.theme = NewDarkTheme()
+	case ThemeModeLight:
+		m.theme = NewLightTheme()
+	default:
+		if systemThemeMode() == ThemeModeDark {
+			m.theme = NewDarkTheme()
+		} else {
+			m.theme = NewLightTheme()
+		}
+	}
 }

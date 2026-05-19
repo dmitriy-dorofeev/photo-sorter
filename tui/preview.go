@@ -38,9 +38,9 @@ func (m Model) updatePreview(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewPreview() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 5. Предпросмотр"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 5. Предпросмотр"))
 	b.WriteString("\n\n")
 
 	st := m.computeScanStats()
@@ -64,7 +64,7 @@ func (m Model) viewPreview() string {
 	// Дерево папок
 	dirs := m.previewDirs()
 	if len(dirs) > 0 {
-		b.WriteString(highlightStyle.Render("Целевая структура:") + "\n")
+		b.WriteString(m.theme.Highlight.Render("Целевая структура:") + "\n")
 		shown := 0
 		for _, d := range dirs {
 			if shown >= maxDirs {
@@ -83,7 +83,7 @@ func (m Model) viewPreview() string {
 
 	// Дубли
 	if len(m.duplicates) > 0 {
-		b.WriteString(errorStyle.Render(fmt.Sprintf("Дубликаты (%d групп):", len(m.duplicates))) + "\n")
+		b.WriteString(m.theme.Error.Render(fmt.Sprintf("Дубликаты (%d групп):", len(m.duplicates))) + "\n")
 		for i, dup := range m.duplicates {
 			if i >= maxSmall {
 				b.WriteString(fmt.Sprintf("  … и ещё %d групп\n", len(m.duplicates)-i))
@@ -97,7 +97,7 @@ func (m Model) viewPreview() string {
 	// Unsorted
 	unsorted := m.unsortedFiles()
 	if len(unsorted) > 0 {
-		b.WriteString(errorStyle.Render(fmt.Sprintf("Без даты — unsorted/ (%d файлов):", len(unsorted))) + "\n")
+		b.WriteString(m.theme.Error.Render(fmt.Sprintf("Без даты — unsorted/ (%d файлов):", len(unsorted))) + "\n")
 		for i, f := range unsorted {
 			if i >= maxSmall {
 				b.WriteString(fmt.Sprintf("  … и ещё %d\n", len(unsorted)-i))
@@ -108,7 +108,7 @@ func (m Model) viewPreview() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString(helpStyle.Render("← — назад • enter — запустить копирование • esc — выход"))
+	b.WriteString(m.theme.Help.Render("← — назад • enter — запустить копирование • esc — выход"))
 	return b.String()
 }
 

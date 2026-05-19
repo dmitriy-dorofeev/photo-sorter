@@ -78,24 +78,24 @@ func (m Model) updateQuickStart(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewQuickStart() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 3. Подтверждение"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 3. Подтверждение"))
 	b.WriteString("\n\n")
 
 	// ── Сводка выбранных путей ──
-	b.WriteString(highlightStyle.Render("Источники: "))
+	b.WriteString(m.theme.Highlight.Render("Источники: "))
 	if len(m.Sources) == 0 {
 		b.WriteString("(не выбрано)\n")
 	} else {
 		b.WriteString(strings.Join(m.Sources, ", ") + "\n")
 	}
-	b.WriteString(highlightStyle.Render("Цель: "))
+	b.WriteString(m.theme.Highlight.Render("Цель: "))
 	b.WriteString(m.Target + "\n")
 	b.WriteString("\n")
 
 	// ── Краткая сводка настроек по умолчанию ──
-	b.WriteString(subtitleStyle.Render("Настройки по умолчанию:"))
+	b.WriteString(m.theme.Subtitle.Render("Настройки по умолчанию:"))
 	b.WriteString("\n")
 
 	templateVal := m.GetSettingString("template")
@@ -131,13 +131,13 @@ func (m Model) viewQuickStart() string {
 	for i, opt := range options {
 		cursor := "  "
 		if m.quickStart.cursor == i {
-			cursor = highlightStyle.Render("▸ ")
+			cursor = m.theme.Highlight.Render("▸ ")
 		}
 		b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, opt.icon, opt.label))
 	}
 
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter/→ — продолжить • ← — назад • esc — выход"))
+	b.WriteString(m.theme.Help.Render("↑/↓ — выбрать • enter/→ — продолжить • ← — назад • esc — выход"))
 
 	return b.String()
 }

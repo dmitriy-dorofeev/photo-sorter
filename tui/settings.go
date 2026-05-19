@@ -264,6 +264,16 @@ func newSettingsModel() settingsModel {
 				choiceIdx:    0,
 				stringValue:  "1",
 			},
+			{
+				label:        "Тема оформления",
+				key:          "theme",
+				help:         "Автоопределение по системе или ручной выбор",
+				stype:        settingTypeChoice,
+				choices:      []string{"Авто", "Светлая", "Тёмная"},
+				choiceValues: []string{"auto", "light", "dark"},
+				choiceIdx:    0,
+				stringValue:  "auto",
+			},
 		},
 		input: ti,
 	}
@@ -451,6 +461,16 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 					item.choiceIdx = 0
 				}
 				item.stringValue = item.choiceValues[item.choiceIdx]
+				if item.key == "theme" {
+					mode := ThemeModeAuto
+					switch item.stringValue {
+					case "light":
+						mode = ThemeModeLight
+					case "dark":
+						mode = ThemeModeDark
+					}
+					m.applyThemeMode(mode)
+				}
 				return m, nil
 			default:
 				return m, nil
@@ -470,19 +490,19 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) viewSettings() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(" photo-sorter "))
+	b.WriteString(m.theme.Title.Render(" photo-sorter "))
 	b.WriteString("\n\n")
-	b.WriteString(subtitleStyle.Render("Шаг 3. Настройки сортировки"))
+	b.WriteString(m.theme.Subtitle.Render("Шаг 3. Настройки сортировки"))
 	b.WriteString("\n\n")
 
 	// Показываем выбранные пути
-	b.WriteString(highlightStyle.Render("Источники: "))
+	b.WriteString(m.theme.Highlight.Render("Источники: "))
 	if len(m.Sources) == 0 {
 		b.WriteString("(не выбрано)\n")
 	} else {
 		b.WriteString(strings.Join(m.Sources, ", ") + "\n")
 	}
-	b.WriteString(highlightStyle.Render("Цель: "))
+	b.WriteString(m.theme.Highlight.Render("Цель: "))
 	b.WriteString(m.Target + "\n")
 	b.WriteString("\n")
 
@@ -490,13 +510,13 @@ func (m Model) viewSettings() string {
 	if m.settings.templateSelect {
 		b.WriteString(m.viewTemplateSelect())
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
+		b.WriteString(m.theme.Help.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
 		return b.String()
 	}
 	if m.settings.fileNameSelect {
 		b.WriteString(m.viewFileNameTemplateSelect())
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
+		b.WriteString(m.theme.Help.Render("↑/↓ — выбрать • enter — применить • esc — отмена"))
 		return b.String()
 	}
 
@@ -504,38 +524,38 @@ func (m Model) viewSettings() string {
 	for i, item := range m.settings.items {
 		cursor := "  "
 		if m.settings.cursor == i {
-			cursor = highlightStyle.Render("▸ ")
+			cursor = m.theme.Highlight.Render("▸ ")
 		}
 
 		var valueStr string
 		switch item.stype {
 		case settingTypeBool:
 			if item.boolValue {
-				valueStr = successStyle.Render("✓ да")
+				valueStr = m.theme.Success.Render("✓ да")
 			} else {
-				valueStr = errorStyle.Render("✗ нет")
+				valueStr = m.theme.Error.Render("✗ нет")
 			}
 		case settingTypeText:
 			if m.settings.editing && m.settings.cursor == i {
 				valueStr = m.settings.input.View()
 			} else {
 				if item.key == "template" {
-					valueStr = highlightStyle.Render(formatTemplateDisplay(item.stringValue))
+					valueStr = m.theme.Highlight.Render(formatTemplateDisplay(item.stringValue))
 				} else {
-					valueStr = highlightStyle.Render(formatFileNameDisplay(item.stringValue))
+					valueStr = m.theme.Highlight.Render(formatFileNameDisplay(item.stringValue))
 				}
 			}
 		case settingTypeChoice:
-			valueStr = highlightStyle.Render(item.choices[item.choiceIdx])
+			valueStr = m.theme.Highlight.Render(item.choices[item.choiceIdx])
 		default:
 		}
 
-		labelCol := settingLabelStyle.Render(cursor + item.label + ":")
+		labelCol := m.theme.SettingLabel.Render(cursor + item.label + ":")
 		line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, valueStr)
 		b.WriteString(line + "\n")
 
 		if m.settings.cursor == i && !m.settings.editing {
-			helpLine := helpStyle.Render("  " + item.help)
+			helpLine := m.theme.Help.Render("  " + item.help)
 			b.WriteString(helpLine + "\n")
 		}
 	}
@@ -543,14 +563,14 @@ func (m Model) viewSettings() string {
 	b.WriteString("\n")
 
 	if m.exifToolPath == "" {
-		b.WriteString(errorStyle.Render("⚠ exiftool не найден: видео-метаданные и запись EXIF недоступны.") + "\n")
+		b.WriteString(m.theme.Error.Render("⚠ exiftool не найден: видео-метаданные и запись EXIF недоступны.") + "\n")
 		b.WriteString("\n")
 	}
 
 	if m.settings.editing {
-		b.WriteString(helpStyle.Render("enter — сохранить • esc — отменить"))
+		b.WriteString(m.theme.Help.Render("enter — сохранить • esc — отменить"))
 	} else {
-		b.WriteString(helpStyle.Render("↑/↓ — выбрать • enter/пробел — изменить • ← — назад • → — продолжить • esc — выход"))
+		b.WriteString(m.theme.Help.Render("↑/↓ — выбрать • enter/пробел — изменить • ← — назад • → — продолжить • esc — выход"))
 	}
 
 	return b.String()
@@ -560,20 +580,20 @@ func (m Model) viewSettings() string {
 func (m Model) viewTemplateSelect() string {
 	var b strings.Builder
 
-	b.WriteString(highlightStyle.Render("Выберите формат папок:"))
+	b.WriteString(m.theme.Highlight.Render("Выберите формат папок:"))
 	b.WriteString("\n\n")
 
 	for i, preset := range templatePresets {
 		cursor := "  "
 		if m.settings.templateCursor == i {
-			cursor = highlightStyle.Render("▸ ")
+			cursor = m.theme.Highlight.Render("▸ ")
 		}
 
 		if preset.label == "Свой формат…" {
 			b.WriteString(cursor + preset.label + "\n")
 		} else {
 			example := time.Now().Format(preset.value)
-			labelCol := templateLabelStyle.Render(cursor + preset.label)
+			labelCol := m.theme.TemplateLabel.Render(cursor + preset.label)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+example)
 			b.WriteString(line + "\n")
 		}
@@ -586,19 +606,19 @@ func (m Model) viewTemplateSelect() string {
 func (m Model) viewFileNameTemplateSelect() string {
 	var b strings.Builder
 
-	b.WriteString(highlightStyle.Render("Выберите формат имён файлов:"))
+	b.WriteString(m.theme.Highlight.Render("Выберите формат имён файлов:"))
 	b.WriteString("\n\n")
 
 	for i, preset := range fileNamePresets {
 		cursor := "  "
 		if m.settings.fileNameCursor == i {
-			cursor = highlightStyle.Render("▸ ")
+			cursor = m.theme.Highlight.Render("▸ ")
 		}
 
 		if preset.label == "Свой формат…" {
 			b.WriteString(cursor + preset.label + "\n")
 		} else {
-			labelCol := templateLabelStyle.Render(cursor + preset.label)
+			labelCol := m.theme.TemplateLabel.Render(cursor + preset.label)
 			line := lipgloss.JoinHorizontal(lipgloss.Top, labelCol, " → "+preset.value)
 			b.WriteString(line + "\n")
 		}
