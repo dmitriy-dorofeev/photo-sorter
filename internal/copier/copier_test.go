@@ -710,3 +710,240 @@ func TestCopy_WriteExif_DryRun(t *testing.T) {
 		t.Errorf("expected 0 exif writes in dry-run, got %d", stats.ExifWrites)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Параллельное копирование
+// ---------------------------------------------------------------------------
+
+func TestCopyParallel_Basic(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	var entries []sorter.Entry
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		os.WriteFile(filepath.Join(srcDir, name), []byte(fmt.Sprintf("content%d", i)), 0644)
+		entries = append(entries, sorter.Entry{
+			Source: scanner.FileInfo{Path: filepath.Join(srcDir, name), Name: name, Size: int64(len(fmt.Sprintf("content%d", i)))},
+			Target: filepath.Join(dstDir, name),
+		})
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 10 {
+		t.Errorf("expected 10 copied, got %d", stats.Copied)
+	}
+	if stats.Errors != 0 {
+		t.Errorf("expected 0 errors, got %d", stats.Errors)
+	}
+
+	for i := 0; i < 10; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		data, err := os.ReadFile(filepath.Join(dstDir, name))
+		if err != nil {
+			t.Fatalf("read dst %s: %v", name, err)
+		}
+		if string(data) != fmt.Sprintf("content%d", i) {
+			t.Errorf("content mismatch for %s", name)
+		}
+	}
+}
+
+func TestCopyParallel_CollisionSameDir(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	// Два файла с разным содержимым, но одинаковым целевым именем.
+	os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("first"), 0644)
+	os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("second"), 0644)
+	// На диске уже лежит файл с таким именем.
+	os.WriteFile(filepath.Join(dstDir, "target.txt"), []byte("existing"), 0644)
+
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.txt"), Name: "a.txt", Size: 5}, Target: filepath.Join(dstDir, "target.txt")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "b.txt"), Name: "b.txt", Size: 6}, Target: filepath.Join(dstDir, "target.txt")},
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 2 {
+		t.Errorf("expected 2 copied, got %d", stats.Copied)
+	}
+	if stats.Errors != 0 {
+		t.Errorf("expected 0 errors, got %d", stats.Errors)
+	}
+
+	// Проверяем, что ни один файл не был потерян.
+	files, err := os.ReadDir(dstDir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(files) != 3 {
+		t.Errorf("expected 3 files in dst, got %d", len(files))
+	}
+}
+
+func TestCopyParallel_ProgressOrder(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	var entries []sorter.Entry
+	for i := 0; i < 5; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		os.WriteFile(filepath.Join(srcDir, name), []byte("x"), 0644)
+		entries = append(entries, sorter.Entry{
+			Source: scanner.FileInfo{Path: filepath.Join(srcDir, name), Name: name, Size: 1},
+			Target: filepath.Join(dstDir, name),
+		})
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	var calls int
+	_, err := c.Copy(context.Background(), entries, func(cur, tot int) {
+		calls++
+		if tot != 5 {
+			t.Errorf("total = %d, want 5", tot)
+		}
+	})
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if calls != 5 {
+		t.Errorf("progress called %d times, want 5", calls)
+	}
+}
+
+func TestCopyParallel_ContextCancel(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		os.WriteFile(filepath.Join(srcDir, name), []byte("x"), 0644)
+	}
+
+	var entries []sorter.Entry
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		entries = append(entries, sorter.Entry{
+			Source: scanner.FileInfo{Path: filepath.Join(srcDir, name), Name: name, Size: 1},
+			Target: filepath.Join(dstDir, name),
+		})
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var once sync.Once
+	_, err := c.Copy(ctx, entries, func(cur, tot int) {
+		if cur >= 2 {
+			once.Do(cancel)
+		}
+	})
+	if err == nil {
+		t.Fatal("expected context cancellation error")
+	}
+}
+
+func TestCopyParallel_AbortOnMissingTarget(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := filepath.Join(t.TempDir(), "target")
+	os.MkdirAll(dstDir, 0755)
+	for i := 0; i < 5; i++ {
+		os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), []byte("x"), 0644)
+	}
+
+	// Превращаем целевую директорию в обычный файл, чтобы os.MkdirAll падал.
+	os.RemoveAll(dstDir)
+	os.WriteFile(dstDir, []byte("not a dir"), 0644)
+
+	var entries []sorter.Entry
+	for i := 0; i < 5; i++ {
+		entries = append(entries, sorter.Entry{
+			Source: scanner.FileInfo{Path: filepath.Join(srcDir, fmt.Sprintf("f%d.txt", i)), Name: fmt.Sprintf("f%d.txt", i), Size: 1},
+			Target: filepath.Join(dstDir, fmt.Sprintf("f%d.txt", i)),
+		})
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	_, err := c.Copy(context.Background(), entries, nil)
+	if err == nil {
+		t.Fatal("expected error when target is not a directory")
+	}
+}
+
+func TestCopyParallel_SkipAndDryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	for i := 0; i < 4; i++ {
+		name := fmt.Sprintf("f%d.txt", i)
+		os.WriteFile(filepath.Join(srcDir, name), []byte("x"), 0644)
+	}
+
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "f0.txt"), Name: "f0.txt", Size: 1}, Target: filepath.Join(dstDir, "f0.txt"), Skip: true},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "f1.txt"), Name: "f1.txt", Size: 1}, Target: filepath.Join(dstDir, "f1.txt"), Skip: true},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "f2.txt"), Name: "f2.txt", Size: 1}, Target: filepath.Join(dstDir, "f2.txt")},
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "f3.txt"), Name: "f3.txt", Size: 1}, Target: filepath.Join(dstDir, "f3.txt")},
+	}
+
+	c := New(true, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 2 {
+		t.Errorf("expected 2 copied (dry-run), got %d", stats.Copied)
+	}
+	if stats.Skipped != 2 {
+		t.Errorf("expected 2 skipped, got %d", stats.Skipped)
+	}
+}
+
+func TestCopyParallel_TargetUpdate(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+
+	os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("new"), 0644)
+	os.WriteFile(filepath.Join(dstDir, "a.txt"), []byte("old"), 0644)
+
+	entries := []sorter.Entry{
+		{Source: scanner.FileInfo{Path: filepath.Join(srcDir, "a.txt"), Name: "a.txt", Size: 3}, Target: filepath.Join(dstDir, "a.txt")},
+	}
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.Concurrency = 4
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+	want := filepath.Join(dstDir, "a_1.txt")
+	if entries[0].Target != want {
+		t.Errorf("Entry.Target = %q, want %q", entries[0].Target, want)
+	}
+}

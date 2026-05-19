@@ -9,12 +9,15 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
 
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
 )
 
@@ -39,6 +42,8 @@ type Copier struct {
 	collisionStrategy collision.Strategy
 	WriteExif         bool
 	ExifToolPath      string
+	Concurrency       int      // число потоков; ≤1 — последовательный режим
+	dirLocks          sync.Map // string → *sync.Mutex
 }
 
 // New создаёт новый Copier.
@@ -54,6 +59,18 @@ func New(dryRun bool, targetRoot string, collisionStrategy collision.Strategy) *
 // Copy выполняет копирование по плану сортировки.
 // progress вызывается после обработки каждого элемента (current из [0,total]).
 func (c *Copier) Copy(
+	ctx context.Context,
+	entries []sorter.Entry,
+	progress func(current, total int),
+) (Stats, error) {
+	if c.Concurrency <= 1 {
+		return c.copySequential(ctx, entries, progress)
+	}
+	return c.copyParallel(ctx, entries, progress)
+}
+
+// copySequential выполняет последовательное копирование.
+func (c *Copier) copySequential(
 	ctx context.Context,
 	entries []sorter.Entry,
 	progress func(current, total int),
@@ -208,6 +225,232 @@ func (c *Copier) Copy(
 	return stats, nil
 }
 
+// copyParallel выполняет параллельное копирование через errgroup.
+func (c *Copier) copyParallel(
+	ctx context.Context,
+	entries []sorter.Entry,
+	progress func(current, total int),
+) (Stats, error) {
+	var stats Stats
+	total := len(entries)
+
+	if !c.dryRun && c.targetRoot != "" && total > 0 {
+		if err := c.checkDiskSpace(entries); err != nil {
+			return stats, err
+		}
+	}
+
+	var (
+		statsMu    sync.Mutex
+		entryMu    sync.Mutex
+		progressMu sync.Mutex
+		syncDirsMu sync.Mutex
+		syncDirs   = make(map[string]struct{})
+		processed  atomic.Int64
+		targetErrs atomic.Int32
+	)
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(c.Concurrency)
+
+	for i := range entries {
+		i := i
+		e := &entries[i]
+
+		g.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
+
+			if e.Skip {
+				statsMu.Lock()
+				stats.Skipped++
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				return nil
+			}
+
+			if c.targetRoot == "" {
+				statsMu.Lock()
+				stats.Errors++
+				c.recordError(&stats, fmt.Errorf("target root is empty"))
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				return nil
+			}
+
+			if err := validateTargetPath(c.targetRoot, e.Target); err != nil {
+				statsMu.Lock()
+				stats.Errors++
+				c.recordError(&stats, err)
+				abort := c.shouldAbortParallel(err, &targetErrs)
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				if abort {
+					return fmt.Errorf("too many target errors, aborting")
+				}
+				return nil
+			}
+
+			if c.dryRun {
+				statsMu.Lock()
+				stats.Copied++
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				return nil
+			}
+
+			dir := filepath.Dir(e.Target)
+			actual, _ := c.dirLocks.LoadOrStore(dir, &sync.Mutex{})
+			dirMu := actual.(*sync.Mutex)
+			dirMu.Lock()
+
+			if err := os.MkdirAll(dir, 0750); err != nil {
+				dirMu.Unlock()
+				statsMu.Lock()
+				stats.Errors++
+				c.recordError(&stats, err)
+				abort := c.shouldAbortParallel(err, &targetErrs)
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				if abort {
+					return fmt.Errorf("too many target errors, aborting")
+				}
+				return nil
+			}
+			syncDirsMu.Lock()
+			syncDirs[dir] = struct{}{}
+			syncDirsMu.Unlock()
+
+			target := e.Target
+			if info, err := os.Lstat(target); err == nil {
+				if info.Mode()&os.ModeSymlink != 0 {
+					if err := os.Remove(target); err != nil {
+						dirMu.Unlock()
+						statsMu.Lock()
+						stats.Errors++
+						c.recordError(&stats, err)
+						statsMu.Unlock()
+						c.reportProgress(progress, &progressMu, &processed, total)
+						return nil
+					}
+				} else {
+					hSrc, err1 := c.hashFunc(ctx, e.Source.Path)
+					hDst, err2 := c.hashFunc(ctx, target)
+					if err1 == nil && err2 == nil && hSrc == hDst {
+						dirMu.Unlock()
+						statsMu.Lock()
+						stats.Skipped++
+						statsMu.Unlock()
+						c.reportProgress(progress, &progressMu, &processed, total)
+						return nil
+					}
+					newTarget, err := c.resolveCollision(target, e.Source.Path)
+					if err != nil {
+						dirMu.Unlock()
+						statsMu.Lock()
+						stats.Errors++
+						c.recordError(&stats, err)
+						abort := c.shouldAbortParallel(err, &targetErrs)
+						statsMu.Unlock()
+						c.reportProgress(progress, &progressMu, &processed, total)
+						if abort {
+							return fmt.Errorf("too many target errors, aborting")
+						}
+						return nil
+					}
+					target = newTarget
+				}
+			}
+
+			entryMu.Lock()
+			entries[i].Target = target
+			entryMu.Unlock()
+
+			if err := c.copyFile(ctx, e.Source.Path, target); err != nil {
+				dirMu.Unlock()
+				if errors.Is(err, errSkipCollision) {
+					statsMu.Lock()
+					stats.Skipped++
+					statsMu.Unlock()
+					c.reportProgress(progress, &progressMu, &processed, total)
+					return nil
+				}
+				statsMu.Lock()
+				if errors.Is(err, errIntegrityCheck) {
+					stats.IntegrityFailures++
+				}
+				stats.Errors++
+				c.recordError(&stats, err)
+				abort := c.shouldAbortParallel(err, &targetErrs)
+				statsMu.Unlock()
+				c.reportProgress(progress, &progressMu, &processed, total)
+				if abort {
+					return fmt.Errorf("too many target errors, aborting")
+				}
+				return nil
+			}
+
+			// Обратная синхронизация: если дата взята из имени или mtime, записываем её в EXIF.
+			if c.WriteExif && !e.Skip && isWritableImage(e.Source.Ext) &&
+				(e.DateSource == dateresolver.SourceFilename || e.DateSource == dateresolver.SourceModTime) {
+				if err := writeExifDate(ctx, c.ExifToolPath, target, e.Date); err != nil {
+					statsMu.Lock()
+					stats.ExifFailures++
+					c.recordError(&stats, fmt.Errorf("exif write failed for %s: %w", target, err))
+					statsMu.Unlock()
+				} else {
+					statsMu.Lock()
+					stats.ExifWrites++
+					statsMu.Unlock()
+				}
+			}
+
+			statsMu.Lock()
+			stats.Copied++
+			stats.BytesCopied += e.Source.Size
+			statsMu.Unlock()
+
+			dirMu.Unlock()
+			c.reportProgress(progress, &progressMu, &processed, total)
+			return nil
+		})
+	}
+
+	err := g.Wait()
+
+	// Синхронизируем все затронутые поддиректории и корень.
+	if !c.dryRun && stats.Copied > 0 && c.targetRoot != "" {
+		syncDirsMu.Lock()
+		syncDirs[c.targetRoot] = struct{}{}
+		dirs := make([]string, 0, len(syncDirs))
+		for d := range syncDirs {
+			dirs = append(dirs, d)
+		}
+		syncDirsMu.Unlock()
+		for _, d := range dirs {
+			if err := syncDir(d); err != nil {
+				// ignore fsync errors on directories
+			}
+		}
+	}
+
+	return stats, err
+}
+
+// reportProgress атомарно инкрементирует счётчик и вызывает callback.
+func (c *Copier) reportProgress(progress func(current, total int), mu *sync.Mutex, processed *atomic.Int64, total int) {
+	if progress == nil {
+		return
+	}
+	cur := int(processed.Add(1))
+	mu.Lock()
+	progress(cur, total)
+	mu.Unlock()
+}
+
 // syncDir вызывает fsync на директории, гарантируя сброс
 // метаданных файловой системы на диск.
 func syncDir(path string) error {
@@ -252,6 +495,29 @@ func (c *Copier) shouldAbort(consecutiveErrors *int, err error) bool {
 		return false
 	}
 	if !isTargetError(err) {
+		return false
+	}
+	if c.targetRoot == "" {
+		return false
+	}
+	info, err := os.Stat(c.targetRoot)
+	if os.IsNotExist(err) || os.IsPermission(err) {
+		return true
+	}
+	if err == nil && !info.IsDir() {
+		return true
+	}
+	return false
+}
+
+// shouldAbortParallel — версия shouldAbort для параллельного режима.
+// Считает суммарное число target-ошибок (не обязательно подряд).
+func (c *Copier) shouldAbortParallel(err error, targetErrors *atomic.Int32) bool {
+	if !isTargetError(err) {
+		return false
+	}
+	n := targetErrors.Add(1)
+	if n < 3 {
 		return false
 	}
 	if c.targetRoot == "" {

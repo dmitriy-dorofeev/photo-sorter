@@ -35,6 +35,7 @@ type Config struct {
 	FullCheck         bool     // игнорировать state при фильтрации
 	DryRun            bool     // пробный прогон — не изменять state
 	ReportFormat      string   // формат файла-отчёта: text | html
+	Concurrency       int      // число параллельных потоков копирования
 }
 
 // Result содержит результаты этапов pipeline.

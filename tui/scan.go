@@ -115,6 +115,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		ExifToolPath:      m.exifToolPath,
 		FullCheck:         !m.GetSettingBool("skip_sorted"),
 		ReportFormat:      m.GetSettingString("report_format"),
+		Concurrency:       m.concurrency(),
 	}
 
 	// Закрываем предыдущее состояние, если оно осталось от прошлого запуска.

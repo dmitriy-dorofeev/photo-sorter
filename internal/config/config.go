@@ -32,4 +32,7 @@ const (
 
 	// DefaultReportFormat — формат файла-отчёта по умолчанию.
 	DefaultReportFormat = "html"
+
+	// DefaultConcurrency — количество потоков копирования по умолчанию (1 = последовательно).
+	DefaultConcurrency = 1
 )

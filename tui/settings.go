@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -252,6 +253,16 @@ func newSettingsModel() settingsModel {
 				choiceValues: []string{"html", "text"},
 				choiceIdx:    0,
 				stringValue:  config.DefaultReportFormat,
+			},
+			{
+				label:        "Потоки копирования",
+				key:          "concurrency",
+				help:         "Параллельное копирование для SSD/NAS (1 = последовательно)",
+				stype:        settingTypeChoice,
+				choices:      []string{"1 (последовательно)", "2", "4", "8"},
+				choiceValues: []string{"1", "2", "4", "8"},
+				choiceIdx:    0,
+				stringValue:  "1",
 			},
 		},
 		input: ti,
@@ -618,4 +629,16 @@ func (m Model) GetSettingString(key string) string {
 		}
 	}
 	return ""
+}
+
+// concurrency возвращает число потоков копирования из настроек TUI.
+func (m Model) concurrency() int {
+	s := m.GetSettingString("concurrency")
+	if s == "" {
+		return config.DefaultConcurrency
+	}
+	if n, err := strconv.Atoi(s); err == nil && n > 0 {
+		return n
+	}
+	return config.DefaultConcurrency
 }

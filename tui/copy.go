@@ -69,6 +69,7 @@ func (m Model) startCopy() (Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		strategy := collision.Strategy(m.GetSettingString("collision_strategy"))
 		c := copier.New(dryRun, m.Target, strategy)
+		c.Concurrency = m.concurrency()
 		c.WriteExif = m.GetSettingBool("write_exif") && m.exifToolPath != ""
 		c.ExifToolPath = m.exifToolPath
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {

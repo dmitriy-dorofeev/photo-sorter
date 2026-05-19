@@ -86,6 +86,7 @@ func main() {
 		notifyFlag        bool
 		fullCheck         bool
 		resetState        bool
+		concurrency       int
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -107,6 +108,7 @@ func main() {
 	flag.BoolVar(&notifyFlag, "notify", config.DefaultNotify, "Показать системное уведомление по завершении")
 	flag.BoolVar(&fullCheck, "full-check", false, "Игнорировать state, пересортировать все файлы")
 	flag.BoolVar(&resetState, "reset-state", false, "Удалить state перед запуском")
+	flag.IntVar(&concurrency, "concurrency", config.DefaultConcurrency, "Число параллельных потоков копирования (1 = последовательно)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -182,6 +184,7 @@ func main() {
 		FullCheck:         fullCheck,
 		DryRun:            dryRun,
 		ReportFormat:      reportFormat,
+		Concurrency:       concurrency,
 	}
 
 	if resetState && cfg.Target != "" {
@@ -310,6 +313,7 @@ func runCLI(cfg runner.Config, dryRun bool, format, reportFormat string, notifyF
 	}
 
 	c := copier.New(dryRun, cfg.Target, collision.Strategy(cfg.CollisionStrategy))
+	c.Concurrency = cfg.Concurrency
 	c.WriteExif = cfg.WriteExif
 	c.ExifToolPath = cfg.ExifToolPath
 	stats, err := c.Copy(ctx, res.Entries, nil)
