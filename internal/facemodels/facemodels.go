@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -18,6 +19,11 @@ const (
 
 	detectionFileName   = "face-detection.onnx"
 	recognitionFileName = "face-recognition.onnx"
+
+	// Лимит на размер скачиваемой/распаковываемой модели (200 MB).
+	maxModelSize = 200 * 1024 * 1024
+
+	downloadTimeout = 5 * time.Minute
 )
 
 // EnsureModels проверяет наличие ONNX-моделей в modelDir и скачивает
@@ -62,8 +68,10 @@ func ModelsExist(modelDir string) bool {
 	return true
 }
 
+//nolint:gosec // G107: URL — внутренние константы пакета, не пользовательский ввод.
 func downloadFile(url, dest string) error {
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: downloadTimeout}
+	resp, err := client.Get(url)
 	if err != nil {
 		return err
 	}
@@ -73,16 +81,19 @@ func downloadFile(url, dest string) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	out, err := os.Create(dest)
+	cleanDest := filepath.Clean(dest)
+	//nolint:gosec // G304: путь формируется из констант и проверенного modelDir.
+	out, err := os.Create(cleanDest)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
+	_, err = io.CopyN(out, resp.Body, maxModelSize)
 	return err
 }
 
+//nolint:gosec // G107: URL — внутренняя константа пакета.
 func downloadAndExtractRecognition(modelDir string) error {
 	// Скачиваем zip во временный файл.
 	tmpZip, err := os.CreateTemp("", "buffalo_s_*.zip")
@@ -91,7 +102,8 @@ func downloadAndExtractRecognition(modelDir string) error {
 	}
 	defer os.Remove(tmpZip.Name())
 
-	resp, err := http.Get(recognitionURL)
+	client := &http.Client{Timeout: downloadTimeout}
+	resp, err := client.Get(recognitionURL)
 	if err != nil {
 		return err
 	}
@@ -101,7 +113,7 @@ func downloadAndExtractRecognition(modelDir string) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	if _, err := io.Copy(tmpZip, resp.Body); err != nil {
+	if _, err := io.CopyN(tmpZip, resp.Body, maxModelSize); err != nil {
 		return err
 	}
 	if err := tmpZip.Close(); err != nil {
@@ -132,13 +144,14 @@ func downloadAndExtractRecognition(modelDir string) error {
 	}
 	defer rc.Close()
 
-	destPath := filepath.Join(modelDir, recognitionFileName)
-	out, err := os.Create(destPath)
+	cleanDest := filepath.Join(filepath.Clean(modelDir), recognitionFileName)
+	// #nosec G304 — путь формируется из констант и проверенного modelDir.
+	out, err := os.Create(cleanDest)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
 
-	_, err = io.Copy(out, rc)
+	_, err = io.CopyN(out, rc, maxModelSize)
 	return err
 }

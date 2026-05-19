@@ -265,7 +265,8 @@ func isImageExt(ext string) bool {
 }
 
 func loadImage(path string) (image.Image, error) {
-	f, err := os.Open(path)
+	// #nosec G304 — path приходит из scanner.FileInfo, проверенного при обходе файловой системы.
+	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return nil, err
 	}

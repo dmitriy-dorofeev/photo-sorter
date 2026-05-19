@@ -58,6 +58,7 @@ func sendWithTerminalNotifier(title, body string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// #nosec G204 — tnPath получается из exec.LookPath или распаковки во временную директорию; args формируются внутри приложения.
 	cmd := exec.CommandContext(ctx, tnPath, args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("terminal-notifier: %w: %s", err, strings.TrimSpace(string(out)))
@@ -109,30 +110,41 @@ func extractTerminalNotifier(dst string) error {
 	}
 
 	for _, f := range zr.File {
+		if !filepath.IsLocal(f.Name) {
+			continue // пропускаем потенциально опасные пути (zip slip)
+		}
+		// #nosec G305 — проверка filepath.IsLocal выше защищает от zip slip.
 		path := filepath.Join(dst, f.Name)
 		if f.FileInfo().IsDir() {
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := os.MkdirAll(path, 0750); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0750); err != nil {
 			return err
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		//nolint:gosec // G304: путь проверен через filepath.IsLocal и filepath.Join с доверенным dst.
+		out, err := os.OpenFile(filepath.Clean(path), os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
-			rc.Close()
+			_ = rc.Close()
 			return err
 		}
-		_, err = io.Copy(out, rc)
-		rc.Close()
-		out.Close()
+		_, err = io.CopyN(out, rc, 10*1024*1024) // лимит 10 MB для terminal-notifier
+		closeErr1 := rc.Close()
+		closeErr2 := out.Close()
 		if err != nil {
 			return err
+		}
+		if closeErr1 != nil {
+			return closeErr1
+		}
+		if closeErr2 != nil {
+			return closeErr2
 		}
 	}
 	return nil
