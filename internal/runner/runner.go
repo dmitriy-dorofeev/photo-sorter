@@ -5,6 +5,8 @@ package runner
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -12,6 +14,8 @@ import (
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/facealias"
+	"photo-sorter/internal/facerunner"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/renamer"
 	"photo-sorter/internal/scanner"
@@ -38,6 +42,12 @@ type Config struct {
 	DryRun            bool     // пробный прогон — не изменять state
 	ReportFormat      string   // формат файла-отчёта: text | html
 	Concurrency       int      // число параллельных потоков копирования
+
+	// Face-кластеризация
+	SortMode       string         // "date" (default) или "face"
+	FaceModelPath  string         // путь к директории с ONNX моделями
+	FaceSimilarity float32        // порог cosine similarity (default 0.6)
+	FaceAliases    map[int]string // clusterID → alias (CLI only)
 }
 
 // Result содержит результаты этапов pipeline.
@@ -51,6 +61,9 @@ type Result struct {
 	FastHashes map[string]uint64 // fasthash для toProcess
 	FullHashes map[string]uint64 // fullhash для toProcess
 	State      *state.State      // открытое состояние (nil если FullCheck или ошибка)
+
+	// Face-кластеризация (только при SortMode == "face").
+	FaceAliases map[string]string // ключ date|hash → alias
 }
 
 // ResultStats содержит агрегированную статистику по результатам pipeline.
@@ -260,6 +273,32 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 
 	if progress != nil {
 		progress("sort", len(entries), len(entries))
+	}
+
+	// 8. Face-кластеризация (если включена)
+	if cfg.SortMode == "face" {
+		aliasMgr := facealias.NewManager()
+		faceCfg := facerunner.Config{
+			ModelPath:   cfg.FaceModelPath,
+			Similarity:  cfg.FaceSimilarity,
+			Concurrency: cfg.Concurrency,
+		}
+		if faceCfg.ModelPath == "" {
+			faceCfg.ModelPath = filepath.Join(os.Getenv("HOME"), ".photo-sorter", "models")
+		}
+		faceRunner, err := facerunner.NewRunner(faceCfg)
+		if err != nil {
+			// Face-модели не найдены — предупреждаем, но не прерываем pipeline.
+			// Fallback на date-режим.
+			fmt.Fprintf(os.Stderr, "⚠ Face-кластеризация недоступна: %v\n", err)
+		} else {
+			defer faceRunner.Close()
+			if err := faceRunner.ApplyClustering(ctx, res.Entries, aliasMgr); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠ Ошибка face-кластеризации: %v\n", err)
+			} else {
+				res.FaceAliases = aliasMgr.AllKeys()
+			}
+		}
 	}
 
 	res.State = st

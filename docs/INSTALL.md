@@ -4,6 +4,7 @@
 
 - **Go 1.25+** — только для сборки из исходников
 - **`exiftool`** — опционально, но рекомендуется для видео и записи EXIF
+- **`onnxruntime`** — опционально, только для режима сортировки по лицам (`--sort-mode=face`)
 
 ## Установка бинарника
 
@@ -37,5 +38,30 @@ brew install exiftool
 
 exiftool -ver
 ```
+
+## Установка ONNX Runtime
+
+Требуется только для режима **сортировки по лицам** (`--sort-mode=face`).
+
+```bash
+# macOS через Homebrew
+brew install onnxruntime
+
+# Ubuntu / Debian
+wget https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-linux-x64-1.20.1.tgz
+tar -xzf onnxruntime-linux-x64-1.20.1.tgz
+sudo cp onnxruntime-linux-x64-1.20.1/lib/libonnxruntime.so.1.20.1 /usr/local/lib/
+sudo ldconfig
+```
+
+## ONNX-модели для face-режима
+
+При первом запуске face-режима (`--sort-mode=face`) приложение автоматически скачает необходимые ONNX-модели в `~/.photo-sorter/models/`:
+- `face-detection.onnx` (YuNet, ~233 KB)
+- `face-recognition.onnx` (ArcFace MobileFaceNet, ~13 MB)
+
+Чтобы использовать другую папку для моделей, укажите `--face-model-path` (CLI).
+
+> Если `onnxruntime` не установлен, режим `--sort-mode=face` будет недоступен, но сортировка по датам (`--sort-mode=date`, по умолчанию) продолжит работать.
 
 > Если `exiftool` не установлен, видео всё равно будут обработаны через парсинг имени файла или `mtime`, а запись EXIF будет недоступна.

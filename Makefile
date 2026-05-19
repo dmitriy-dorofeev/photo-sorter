@@ -9,6 +9,9 @@ LDFLAGS := -ldflags "-X main.version=$(VERSION) -s -w"
 build:
 	go build $(LDFLAGS) -o bin/photo-sorter ./cmd
 
+download-models:
+	bash scripts/download-face-models.sh
+
 clean:
 	rm -rf bin/ dist/
 

@@ -14,6 +14,7 @@ import (
 	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
 	"photo-sorter/internal/dateresolver"
+	"photo-sorter/internal/facemodels"
 	"photo-sorter/internal/notify"
 	"photo-sorter/internal/report"
 	"photo-sorter/internal/runner"
@@ -91,6 +92,9 @@ func main() {
 		fullCheck         bool
 		resetState        bool
 		concurrency       int
+		sortMode          string
+		faceModelPath     string
+		faceSimilarity    float64
 	)
 
 	flag.Var(&sources, "source", "Исходная папка (можно несколько)")
@@ -115,6 +119,9 @@ func main() {
 	flag.BoolVar(&fullCheck, "full-check", false, "Игнорировать state, пересортировать все файлы")
 	flag.BoolVar(&resetState, "reset-state", false, "Удалить state перед запуском")
 	flag.IntVar(&concurrency, "concurrency", config.DefaultConcurrency, "Число параллельных потоков копирования (1 = последовательно)")
+	flag.StringVar(&sortMode, "sort-mode", config.DefaultSortMode, "Режим сортировки: date | face")
+	flag.StringVar(&faceModelPath, "face-model-path", "", "Путь к директории с ONNX моделями face detection/recognition")
+	flag.Float64Var(&faceSimilarity, "face-similarity", float64(config.DefaultFaceSimilarity), "Порог cosine similarity для face-кластеризации (0.0–1.0)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, `photo-sorter — организация фотографий по датам съёмки
@@ -194,6 +201,9 @@ func main() {
 		DryRun:            dryRun,
 		ReportFormat:      reportFormat,
 		Concurrency:       concurrency,
+		SortMode:          sortMode,
+		FaceModelPath:     faceModelPath,
+		FaceSimilarity:    float32(faceSimilarity),
 	}
 
 	if resetState && cfg.Target != "" {
@@ -265,6 +275,10 @@ func validateInputs(cfg runner.Config, format, reportFormat string) error {
 		return fmt.Errorf("ошибка: стратегия конфликтов имён должна быть одной из: counter, hash")
 	}
 
+	if cfg.SortMode != "date" && cfg.SortMode != "face" {
+		return fmt.Errorf("ошибка: режим сортировки должен быть 'date' или 'face'")
+	}
+
 	for _, src := range cfg.Sources {
 		info, err := os.Stat(src)
 		if err != nil {
@@ -306,6 +320,16 @@ func validateInputs(cfg runner.Config, format, reportFormat string) error {
 func runCLI(cfg runner.Config, dryRun bool, format, reportFormat string, notifyFlag bool) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
+
+	// При необходимости скачиваем ONNX-модели перед запуском face-режима.
+	if cfg.SortMode == "face" && !facemodels.ModelsExist(cfg.FaceModelPath) {
+		fmt.Fprintln(os.Stderr, "Скачивание ONNX-моделей для face-режима...")
+		if err := facemodels.EnsureModels(cfg.FaceModelPath, func(msg string) {
+			fmt.Fprintln(os.Stderr, msg)
+		}); err != nil {
+			return fmt.Errorf("не удалось подготовить модели: %w", err)
+		}
+	}
 
 	res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
 		fmt.Fprintf(os.Stderr, "%s: %d/%d\n", stage, current, total)

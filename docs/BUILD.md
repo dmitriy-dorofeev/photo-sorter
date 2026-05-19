@@ -117,7 +117,12 @@ photo-sorter/
 │   ├── report/       # генерация итогового отчёта (text / html)
 │   ├── notify/       # системные уведомления
 │   ├── runner/       # единый pipeline
-│   └── updater/      # автообновление
+│   ├── updater/      # автообновление
+│   ├── facedetect/   # детекция лиц (YuNet ONNX)
+│   ├── facerecogn/   # распознавание лиц (ArcFace ONNX)
+│   ├── facecluster/  # кластеризация лиц (Chinese Whispers)
+│   ├── facealias/    # алиасы кластеров
+│   └── facerunner/   # оркестрация face-режима
 ├── tui/              # интерфейс на bubbletea
 └── testdata/         # тестовые файлы
 ```

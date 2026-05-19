@@ -70,6 +70,9 @@ type Model struct {
 	scanCancel     context.CancelFunc
 	scanGeneration int
 
+	// Face-кластеризация
+	faceAliases map[string]string
+
 	// Версия и обновление
 	version      string
 	updateResult *updater.CheckResult
@@ -207,6 +210,7 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.files = nil
 	m.duplicates = nil
 	m.entries = nil
+	m.faceAliases = nil
 	m.previewDirCache = nil
 	m.previewCountCache = nil
 	m.previewFileCache = nil

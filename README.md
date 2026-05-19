@@ -15,6 +15,7 @@
 - **Структура папок** — `YYYY/MM/DD/` или свой шаблон
 - **Переименование по шаблону** — дата, оригинальное имя, устройство, порядковый номер
 - **Live Photos** — `.HEIC` + `.MOV` группируются рядом
+- **Face-кластеризация** — группировка по людям через локальные ONNX-модели (YuNet + ArcFace)
 - **Обратная синхронизация EXIF** — запись `DateTimeOriginal` через `exiftool`
 - **Безопасность** — только копирование, предпросмотр перед запуском, `--dry-run` по умолчанию
 
@@ -49,6 +50,10 @@ tar -xzf photo-sorter_Darwin_arm64.tar.gz
 
 # Реальное копирование
 ./photo-sorter --source ~/Photos --target ~/Sorted --dry-run=false
+
+# Face-кластеризация (группировка по людям)
+./photo-sorter --source ~/Photos --target ~/Sorted --sort-mode=face --dry-run=false
+# Требуется ONNX Runtime. Модели скачиваются автоматически при первом запуске face-режима.
 ```
 
 ## Документация

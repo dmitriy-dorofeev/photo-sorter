@@ -3,9 +3,12 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/facemodels"
 	"photo-sorter/internal/runner"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
@@ -19,15 +22,16 @@ import (
 // ---------------------------------------------------------------------------
 
 type scanResultMsg struct {
-	files      []scanner.FileInfo
-	duplicates []deduper.Result
-	entries    []sorter.Entry
-	fastHashes map[string]uint64
-	fullHashes map[string]uint64
-	allPaths   []string
-	st         *state.State
-	err        error
-	generation int
+	files       []scanner.FileInfo
+	duplicates  []deduper.Result
+	entries     []sorter.Entry
+	fastHashes  map[string]uint64
+	fullHashes  map[string]uint64
+	allPaths    []string
+	st          *state.State
+	faceAliases map[string]string
+	err         error
+	generation  int
 }
 
 // runnerProgressMsg передаёт прогресс из runner.Run в TUI.
@@ -59,13 +63,15 @@ func progressListenCmd(ch <-chan runnerProgressMsg) tea.Cmd {
 type scanStage int
 
 const (
-	scanStageScanning scanStage = iota
+	scanStageDownloadModels scanStage = iota
+	scanStageScanning
 	scanStageDedup
 	scanStageTree
 	scanStageDone
 )
 
 var scanStageNames = []string{
+	"Скачивание моделей...",
 	"Сканирование файлов...",
 	"Поиск дубликатов...",
 	"Построение дерева папок...",
@@ -117,6 +123,9 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		FullCheck:         !m.GetSettingBool("skip_sorted"),
 		ReportFormat:      m.GetSettingString("report_format"),
 		Concurrency:       m.concurrency(),
+		SortMode:          m.GetSettingString("sort_mode"),
+		FaceModelPath:     filepath.Join(os.Getenv("HOME"), ".photo-sorter", "models"),
+		FaceSimilarity:    0.6,
 	}
 
 	// Закрываем предыдущее состояние, если оно осталось от прошлого запуска.
@@ -133,6 +142,22 @@ func (m Model) startScan() (Model, tea.Cmd) {
 	progressCh := m.scan.progressCh
 
 	return m, func() tea.Msg {
+		// При необходимости скачиваем ONNX-модели перед запуском face-режима.
+		if cfg.SortMode == "face" && !facemodels.ModelsExist(cfg.FaceModelPath) {
+			if progressCh != nil {
+				select {
+				case progressCh <- runnerProgressMsg{stage: "models", current: 0, total: 0}:
+				case <-ctx.Done():
+				}
+			}
+			if err := facemodels.EnsureModels(cfg.FaceModelPath, nil); err != nil {
+				if progressCh != nil {
+					close(progressCh)
+				}
+				return scanResultMsg{err: err, generation: gen}
+			}
+		}
+
 		res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
 			if progressCh == nil {
 				return
@@ -150,14 +175,15 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		}
 
 		return scanResultMsg{
-			files:      res.Files,
-			duplicates: res.Duplicates,
-			entries:    res.Entries,
-			fastHashes: res.FastHashes,
-			fullHashes: res.FullHashes,
-			allPaths:   res.AllPaths,
-			st:         res.State,
-			generation: gen,
+			files:       res.Files,
+			duplicates:  res.Duplicates,
+			entries:     res.Entries,
+			fastHashes:  res.FastHashes,
+			fullHashes:  res.FullHashes,
+			allPaths:    res.AllPaths,
+			st:          res.State,
+			faceAliases: res.FaceAliases,
+			generation:  gen,
 		}
 	}
 }
@@ -174,6 +200,9 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var pct float64
 		switch msg.stage {
+		case "models":
+			m.scan.stage = scanStageDownloadModels
+			return m, progressListenCmd(m.scan.progressCh)
 		case "scan":
 			m.scan.stage = scanStageScanning
 			pct = 0.30
@@ -219,6 +248,7 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fullHashes = msg.fullHashes
 		m.allPaths = msg.allPaths
 		m.st = msg.st
+		m.faceAliases = msg.faceAliases
 		m = buildPreviewCache(m)
 		return m, nil
 

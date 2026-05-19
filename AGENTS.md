@@ -15,6 +15,7 @@
 - **Параллелизм**: `golang.org/x/sync/errgroup`
 - **Системные вызовы**: `golang.org/x/sys/unix` (проверка свободного места на диске)
 - **Видео-метаданные**: чтение через внешний `exiftool` (реализовано)
+- **Face-кластеризация**: ONNX Runtime (`github.com/shota3506/onnxruntime-purego`) + YuNet (detection) + ArcFace MobileFaceNet (recognition)
 
 ## Структура проекта
 
@@ -66,6 +67,20 @@ photo-sorter/
 │   │   ├── notify_linux.go        # Linux: notify-send
 │   │   ├── notify_unsupported.go  # Остальные платформы — no-op
 │   │   └── notify_test.go         # Тесты формирования текста уведомления
+│   ├── onnxhelper/
+│   │   └── onnxhelper.go          # Обертка над ONNX Runtime (pure Go)
+│   ├── facedetect/
+│   │   └── facedetect.go          # Детекция лиц через YuNet (ONNX)
+│   ├── facerecogn/
+│   │   └── facerecogn.go          # Распознавание лиц через ArcFace MobileFaceNet (ONNX)
+│   ├── facecluster/
+│   │   ├── chinese_whispers.go    # Графовая кластеризация лиц
+│   │   └── cluster_test.go
+│   ├── facealias/
+│   │   ├── alias.go               # Управление именами кластеров
+│   │   └── alias_test.go
+│   ├── facerunner/
+│   │   └── facerunner.go          # Применение face-кластеризации к плану сортировки
 │   ├── updater/
 │   │   ├── updater.go             # Проверка и установка обновлений с GitHub Releases
 │   │   └── updater_test.go
@@ -118,6 +133,7 @@ make release-major   # v0.1.0 → v1.0.0
 
 - Go 1.25+
 - `exiftool` (опционально, рекомендуется для видео и записи EXIF). Приложение проверяет его наличие при старте; если не найден — видео обрабатываются без метаданных, а запись EXIF автоматически отключается.
+- ONNX Runtime (опционально, требуется для face-кластеризации). Устанавливается через `brew install onnxruntime` (macOS) или пакетный менеджер (Linux). ONNX-модели (YuNet + ArcFace) скачиваются автоматически при первом запуске face-режима в `~/.photo-sorter/models/`.
 
 ### Команды
 
@@ -144,8 +160,11 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 # Запуск в TUI-режиме (по умолчанию)
 ./photo-sorter
 
-# CLI-режим
+# CLI-режим (по датам)
 ./photo-sorter --source ./photos --target ./sorted --dry-run
+
+# CLI-режим (face-кластеризация)
+./photo-sorter --source ./photos --target ./sorted --sort-mode=face --dry-run=false
 ./photo-sorter --source ./a --source ./b --target ./out --dry-run=false
 ./photo-sorter --source ./photos --target ./sorted --name-template "{YYYY}-{MM}-{DD}_{original}{ext}"
 ./photo-sorter --source ./photos --target ./sorted --collision-strategy=hash --dry-run=false
@@ -189,13 +208,20 @@ make snapshot
 4. **dateresolver** — для каждого файла: EXIF (JPEG) → видео-метаданные (exiftool, если доступен) → парсинг имени (8 паттернов) → `mtime` (если включено `UseModTime`) → `unsorted/`. Источник даты (`DateSource`) прокидывается дальше в pipeline. Путь к `exiftool` передаётся через `runner.Config.ExifToolPath`.
 5. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename) и пары RAW + JPEG (`.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename). Поддерживает межзапусковую дедупликацию через `knownHashes` (FullHash из state).
 6. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename), RAW + JPEG fallback (RAW без даты получает дату от соответствующего JPEG/HEIC с тем же basename).
-7. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
-8. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:
+7. **face-кластеризация** (опционально, при `SortMode == "face"`): после `sorter` для каждой датовой группы запускается `facerunner`:
+   - **facedetect** (YuNet ONNX) — находит лица на фото, возвращает bounding box + 5 landmarks.
+   - **facerecogn** (ArcFace MobileFaceNet ONNX) — извлекает 512-dim embedding для доминантного (самого большого) лица.
+   - **facecluster** (Chinese Whispers) — группирует embedding'и по cosine similarity ≥ порога (default 0.6).
+   - **facealias** — назначает имена кластерам (`unknown_1`, `unknown_2`… или заданные пользователем). Alias'ы сохраняются в `state` (bucket `face_aliases`) для восстановления при повторных запусках.
+   - TargetPath изменяется: `YYYY/MM-DD/` → `YYYY/MM-DD/<alias>/`. Фото без лиц → `YYYY/MM-DD/no_faces/`.
+   - Видео и RAW пропускаются (face-детекция только для изображений).
+8. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
+9. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:
    - `text` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` (как раньше, строки с timestamp).
    - `html` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.html` (визуальная страница с карточками статистики, таблицами дубликатов, ошибок и unsorted-файлов).
    Формат выбирается флагом `--report-format` (CLI) или настройкой «Формат отчёта» в TUI. При `dry-run` файл отчёта не создаётся.
-9. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой. На macOS приоритет отдаётся `terminal-notifier` (встроен в бинарник): если приложение запущено из `.app` bundle, уведомление отправляется с `-sender com.photosorter.app` и `-appIcon` (иконка из `build/macos/photo-sorter.icns`). Если `terminal-notifier` недоступен — fallback на `osascript display notification` (без иконки). Вызывается после report в TUI и CLI, если включена настройка.
-10. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
+10. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой. На macOS приоритет отдаётся `terminal-notifier` (встроен в бинарник): если приложение запущено из `.app` bundle, уведомление отправляется с `-sender com.photosorter.app` и `-appIcon` (иконка из `build/macos/photo-sorter.icns`). Если `terminal-notifier` недоступен — fallback на `osascript display notification` (без иконки). Вызывается после report в TUI и CLI, если включена настройка.
+11. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ### Инкрементальные запуски (поведение по умолчанию)
 
@@ -266,6 +292,7 @@ go test ./internal/ -run TestCancellation -v
 - **Дубликаты** — двухуровневая проверка (размер → хеш), чтобы не хешировать все файлы.
 - **Live Photos** — `.HEIC` + `.MOV` с одинаковым basename не считаются дублями друг друга; `.MOV` без даты получает дату от соответствующего `.HEIC`.
 - **RAW + JPEG кластеризация** — `.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename не считаются дублями; RAW без даты получает дату от соответствующего JPEG. Включается флагом `--cluster-raw-jpeg` (default `true`).
+- **Face-кластеризация** — при `SortMode == "face"` фото группируются по людям внутри каждой даты (`YYYY/MM-DD/<alias>/`). Детекция через YuNet, recognition через ArcFace MobileFaceNet (ONNX Runtime). Если ONNX Runtime или модели не найдены — face-режим недоступен, fallback на `date`. Видео и RAW пропускаются (идут в `no_faces/` или обрабатываются без face-группировки).
 - **Коллизии имён** — если в целевой папке файл с таким именем уже есть, сравниваются хеши: совпадают → пропускаем, разные → суффикс по выбранной стратегии (`counter`: `_1`, `_2`; `hash`: `_a3f7b2`). Стратегия задаётся флагом `--collision-strategy` или в TUI. При `hash` один и тот же исходный файл всегда получает одинаковый суффикс (идемпотентность).
 - **Файлы без даты** — помещаются в `unsorted/` в корне целевой папки. Никогда не теряются.
 - **Недостаточно места** — `copier` проверяет свободное место через `unix.Statfs` перед началом копирования.

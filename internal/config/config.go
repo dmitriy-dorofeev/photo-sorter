@@ -41,4 +41,10 @@ const (
 
 	// DefaultConcurrency — количество потоков копирования по умолчанию (1 = последовательно).
 	DefaultConcurrency = 1
+
+	// DefaultSortMode — режим сортировки по умолчанию.
+	DefaultSortMode = "date"
+
+	// DefaultFaceSimilarity — порог cosine similarity для face-кластеризации.
+	DefaultFaceSimilarity = 0.6
 )

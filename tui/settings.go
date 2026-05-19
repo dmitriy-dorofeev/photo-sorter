@@ -183,6 +183,16 @@ func newSettingsModel() settingsModel {
 				stype:       settingTypeText,
 			},
 			{
+				label:        "Режим сортировки",
+				key:          "sort_mode",
+				help:         "Группировать файлы по датам съёмки или по людям (face-кластеризация)",
+				stype:        settingTypeChoice,
+				choices:      []string{"По датам", "По людям (face)"},
+				choiceValues: []string{"date", "face"},
+				choiceIdx:    0,
+				stringValue:  config.DefaultSortMode,
+			},
+			{
 				label:     "Группировать Live Photos",
 				key:       "live_photos",
 				help:      "Не считать .heic + .mov дубликатами (Live Photos)",

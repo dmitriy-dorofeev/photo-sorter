@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	stateDirName  = ".photo-sorter"
-	stateFileName = "state.bolt"
-	bucketName    = "files"
+	stateDirName      = ".photo-sorter"
+	stateFileName     = "state.bolt"
+	bucketName        = "files"
+	faceAliasesBucket = "face_aliases"
 )
 
 // Record содержит метаданные обработанного файла.
@@ -48,7 +49,10 @@ func Open(targetDir string) (*State, error) {
 	}
 	// Создаём bucket, если его нет.
 	err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte(bucketName))
+		if _, err := tx.CreateBucketIfNotExists([]byte(bucketName)); err != nil {
+			return err
+		}
+		_, err := tx.CreateBucketIfNotExists([]byte(faceAliasesBucket))
 		return err
 	})
 	if err != nil {
@@ -176,6 +180,44 @@ func (s *State) Cleanup(existingPaths []string) error {
 		}
 		for _, k := range toDelete {
 			if err := b.Delete(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// GetFaceAliases возвращает все сохранённые face-alias'ы.
+func (s *State) GetFaceAliases() (map[string]string, error) {
+	result := make(map[string]string)
+	if s.db == nil {
+		return result, nil
+	}
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(faceAliasesBucket))
+		if b == nil {
+			return nil
+		}
+		return b.ForEach(func(k, v []byte) error {
+			result[string(k)] = string(v)
+			return nil
+		})
+	})
+	return result, err
+}
+
+// UpdateFaceAliases сохраняет face-alias'ы атомарно (дополняет существующие).
+func (s *State) UpdateFaceAliases(aliases map[string]string) error {
+	if s.db == nil || len(aliases) == 0 {
+		return nil
+	}
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(faceAliasesBucket))
+		if b == nil {
+			return fmt.Errorf("bucket %s not found", faceAliasesBucket)
+		}
+		for k, v := range aliases {
+			if err := b.Put([]byte(k), []byte(v)); err != nil {
 				return err
 			}
 		}
