@@ -211,6 +211,13 @@ func newSettingsModel() settingsModel {
 				stype:     settingTypeBool,
 			},
 			{
+				label:     "Записывать теги Spotlight",
+				key:       "write_spotlight",
+				help:      "Записывать дату съёмки в Spotlight (macOS) для поиска в Finder",
+				boolValue: config.DefaultWriteSpotlight,
+				stype:     settingTypeBool,
+			},
+			{
 				label:     "Показывать уведомления",
 				key:       "notify",
 				help:      "Показать системное уведомление по завершении сортировки",

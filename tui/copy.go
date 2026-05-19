@@ -71,6 +71,7 @@ func (m Model) startCopy() (Model, tea.Cmd) {
 		c := copier.New(dryRun, m.Target, strategy)
 		c.Concurrency = m.concurrency()
 		c.WriteExif = m.GetSettingBool("write_exif") && m.exifToolPath != ""
+		c.WriteSpotlight = m.GetSettingBool("write_spotlight")
 		c.ExifToolPath = m.exifToolPath
 		stats, err := c.Copy(ctx, m.entries, func(cur, tot int) {
 			m.copyProgress.Store(int64(cur))
@@ -257,6 +258,12 @@ func (m Model) viewCopy() string {
 		}
 		if m.copy.stats.ExifFailures > 0 {
 			b.WriteString(m.theme.Error.Render(fmt.Sprintf("Ошибок EXIF: %d", m.copy.stats.ExifFailures)) + "\n")
+		}
+		if m.copy.stats.SpotlightWrites > 0 {
+			b.WriteString(fmt.Sprintf("Spotlight тегов: %d\n", m.copy.stats.SpotlightWrites))
+		}
+		if m.copy.stats.SpotlightFailures > 0 {
+			b.WriteString(m.theme.Error.Render(fmt.Sprintf("Ошибок Spotlight: %d", m.copy.stats.SpotlightFailures)) + "\n")
 		}
 		if m.copy.stats.IntegrityFailures > 0 {
 			b.WriteString(m.theme.Error.Render(fmt.Sprintf("Ошибок целостности: %d", m.copy.stats.IntegrityFailures)) + "\n")

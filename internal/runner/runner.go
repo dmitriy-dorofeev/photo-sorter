@@ -31,6 +31,7 @@ type Config struct {
 	DupStrategy       string   // стратегия выбора оригинала из дубликатов
 	CollisionStrategy string   // стратегия разрешения конфликтов имён
 	WriteExif         bool     // записывать дату в EXIF при копировании
+	WriteSpotlight    bool     // записывать дату в Spotlight-теги macOS
 	ExifToolPath      string   // путь к exiftool (пусто — не использовать)
 	FullCheck         bool     // игнорировать state при фильтрации
 	DryRun            bool     // пробный прогон — не изменять state

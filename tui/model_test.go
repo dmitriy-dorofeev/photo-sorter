@@ -22,8 +22,8 @@ func TestNewModel(t *testing.T) {
 	if len(m.Sources) != 0 {
 		t.Errorf("expected empty Sources, got %v", m.Sources)
 	}
-	if len(m.settings.items) != 13 {
-		t.Errorf("expected 13 settings, got %d", len(m.settings.items))
+	if len(m.settings.items) != 14 {
+		t.Errorf("expected 14 settings, got %d", len(m.settings.items))
 	}
 	if m.settings.cursor != 0 {
 		t.Errorf("expected settings cursor 0, got %d", m.settings.cursor)
@@ -52,29 +52,35 @@ func TestNewModel(t *testing.T) {
 	if m.settings.items[5].AsBool() != config.DefaultWriteExif {
 		t.Errorf("expected default write_exif %v, got %v", config.DefaultWriteExif, m.settings.items[5].AsBool())
 	}
-	if m.settings.items[6].key != "notify" {
-		t.Errorf("expected seventh setting key 'notify', got %s", m.settings.items[6].key)
+	if m.settings.items[6].key != "write_spotlight" {
+		t.Errorf("expected seventh setting key 'write_spotlight', got %s", m.settings.items[6].key)
 	}
-	if m.settings.items[6].AsBool() != config.DefaultNotify {
-		t.Errorf("expected default notify %v, got %v", config.DefaultNotify, m.settings.items[6].AsBool())
+	if m.settings.items[6].AsBool() != config.DefaultWriteSpotlight {
+		t.Errorf("expected default write_spotlight %v, got %v", config.DefaultWriteSpotlight, m.settings.items[6].AsBool())
 	}
-	if m.settings.items[7].key != "skip_sorted" {
-		t.Errorf("expected eighth setting key 'skip_sorted', got %s", m.settings.items[7].key)
+	if m.settings.items[7].key != "notify" {
+		t.Errorf("expected eighth setting key 'notify', got %s", m.settings.items[7].key)
 	}
-	if !m.settings.items[7].AsBool() {
-		t.Errorf("expected default skip_sorted true, got %v", m.settings.items[7].AsBool())
+	if m.settings.items[7].AsBool() != config.DefaultNotify {
+		t.Errorf("expected default notify %v, got %v", config.DefaultNotify, m.settings.items[7].AsBool())
 	}
-	if m.settings.items[8].key != "dup_strategy" {
-		t.Errorf("expected ninth setting key 'dup_strategy', got %s", m.settings.items[8].key)
+	if m.settings.items[8].key != "skip_sorted" {
+		t.Errorf("expected ninth setting key 'skip_sorted', got %s", m.settings.items[8].key)
 	}
-	if m.settings.items[8].AsString() != config.DefaultDupStrategy {
-		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[8].AsString())
+	if !m.settings.items[8].AsBool() {
+		t.Errorf("expected default skip_sorted true, got %v", m.settings.items[8].AsBool())
 	}
-	if m.settings.items[9].key != "collision_strategy" {
-		t.Errorf("expected tenth setting key 'collision_strategy', got %s", m.settings.items[9].key)
+	if m.settings.items[9].key != "dup_strategy" {
+		t.Errorf("expected tenth setting key 'dup_strategy', got %s", m.settings.items[9].key)
 	}
-	if m.settings.items[9].AsString() != config.DefaultCollisionStrategy {
-		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[9].AsString())
+	if m.settings.items[9].AsString() != config.DefaultDupStrategy {
+		t.Errorf("expected default dup_strategy %q, got %q", config.DefaultDupStrategy, m.settings.items[9].AsString())
+	}
+	if m.settings.items[10].key != "collision_strategy" {
+		t.Errorf("expected eleventh setting key 'collision_strategy', got %s", m.settings.items[10].key)
+	}
+	if m.settings.items[10].AsString() != config.DefaultCollisionStrategy {
+		t.Errorf("expected default collision_strategy %q, got %q", config.DefaultCollisionStrategy, m.settings.items[10].AsString())
 	}
 	if m.copyProgress == nil || m.copyTotal == nil {
 		t.Error("expected copyProgress and copyTotal to be initialized")

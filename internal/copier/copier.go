@@ -16,6 +16,7 @@ import (
 	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/spotlight"
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sys/unix"
@@ -29,6 +30,8 @@ type Stats struct {
 	IntegrityFailures int
 	ExifWrites        int
 	ExifFailures      int
+	SpotlightWrites   int
+	SpotlightFailures int
 	BytesCopied       int64
 	ErrorList         []error // до 10 первых ошибок для отчёта
 }
@@ -41,6 +44,7 @@ type Copier struct {
 	hashFunc          func(context.Context, string) (uint64, error)
 	collisionStrategy collision.Strategy
 	WriteExif         bool
+	WriteSpotlight    bool
 	ExifToolPath      string
 	Concurrency       int      // число потоков; ≤1 — последовательный режим
 	dirLocks          sync.Map // string → *sync.Mutex
@@ -199,6 +203,15 @@ func (c *Copier) copySequential(
 				c.recordError(&stats, fmt.Errorf("exif write failed for %s: %w", target, err))
 			} else {
 				stats.ExifWrites++
+			}
+		}
+
+		if c.WriteSpotlight && spotlight.Available() && !e.Skip && !e.Date.IsZero() {
+			if err := spotlight.WriteTags(target, e.Date); err != nil {
+				stats.SpotlightFailures++
+				c.recordError(&stats, fmt.Errorf("spotlight write failed for %s: %w", target, err))
+			} else {
+				stats.SpotlightWrites++
 			}
 		}
 
@@ -404,6 +417,19 @@ func (c *Copier) copyParallel(
 				} else {
 					statsMu.Lock()
 					stats.ExifWrites++
+					statsMu.Unlock()
+				}
+			}
+
+			if c.WriteSpotlight && spotlight.Available() && !e.Skip && !e.Date.IsZero() {
+				if err := spotlight.WriteTags(target, e.Date); err != nil {
+					statsMu.Lock()
+					stats.SpotlightFailures++
+					c.recordError(&stats, fmt.Errorf("spotlight write failed for %s: %w", target, err))
+					statsMu.Unlock()
+				} else {
+					statsMu.Lock()
+					stats.SpotlightWrites++
 					statsMu.Unlock()
 				}
 			}

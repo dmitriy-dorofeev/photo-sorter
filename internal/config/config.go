@@ -27,6 +27,9 @@ const (
 	// DefaultWriteExif — записывать определённую дату в EXIF по умолчанию.
 	DefaultWriteExif = false
 
+	// DefaultWriteSpotlight — записывать дату съёмки в Spotlight-теги macOS по умолчанию.
+	DefaultWriteSpotlight = false
+
 	// DefaultNotify — показывать системное уведомление по завершении.
 	DefaultNotify = true
 

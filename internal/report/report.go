@@ -21,6 +21,8 @@ type Data struct {
 	IntegrityFailures int
 	ExifWrites        int
 	ExifFailures      int
+	SpotlightWrites   int
+	SpotlightFailures int
 	BytesCopied       int64
 	ErrorList         []error
 	Duplicates        []DupGroup
@@ -82,6 +84,12 @@ func generateText(targetDir string, data Data) (string, error) {
 	}
 	if data.ExifFailures > 0 {
 		write(fmt.Sprintf("EXIF failures: %d", data.ExifFailures))
+	}
+	if data.SpotlightWrites > 0 {
+		write(fmt.Sprintf("Spotlight tags written: %d", data.SpotlightWrites))
+	}
+	if data.SpotlightFailures > 0 {
+		write(fmt.Sprintf("Spotlight failures: %d", data.SpotlightFailures))
 	}
 	write(fmt.Sprintf("Bytes copied: %d", data.BytesCopied))
 
@@ -186,6 +194,12 @@ li { margin-bottom: 4px; }
 	}
 	if data.ExifFailures > 0 {
 		writeCard(b, "Ошибок EXIF", fmt.Sprintf("%d", data.ExifFailures), "danger")
+	}
+	if data.SpotlightWrites > 0 {
+		writeCard(b, "Spotlight тегов", fmt.Sprintf("%d", data.SpotlightWrites), "success")
+	}
+	if data.SpotlightFailures > 0 {
+		writeCard(b, "Ошибок Spotlight", fmt.Sprintf("%d", data.SpotlightFailures), "danger")
 	}
 	writeCard(b, "Байт скопировано", humanBytes(data.BytesCopied), "")
 	fmt.Fprint(b, `</div>

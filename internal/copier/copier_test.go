@@ -17,6 +17,7 @@ import (
 	"photo-sorter/internal/hasher"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
+	"photo-sorter/internal/spotlight"
 )
 
 func TestCopy_DryRun(t *testing.T) {
@@ -946,4 +947,84 @@ func TestCopyParallel_TargetUpdate(t *testing.T) {
 	if entries[0].Target != want {
 		t.Errorf("Entry.Target = %q, want %q", entries[0].Target, want)
 	}
+}
+
+func TestCopy_WriteSpotlight(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := New(false, dstDir, collision.StrategyCounter)
+	c.WriteSpotlight = true
+
+	entries := []sorter.Entry{
+		{
+			Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Ext: ".jpg", Size: 5},
+			Target: filepath.Join(dstDir, "2024", "a.jpg"),
+			Date:   time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.Copied != 1 {
+		t.Errorf("expected 1 copied, got %d", stats.Copied)
+	}
+
+	if spotlight.Available() {
+		if stats.SpotlightWrites != 1 {
+			t.Errorf("expected 1 spotlight write on darwin, got %d", stats.SpotlightWrites)
+		}
+		if stats.SpotlightFailures != 0 {
+			t.Errorf("expected 0 spotlight failures, got %d", stats.SpotlightFailures)
+		}
+		// Проверяем, что xattr действительно записан.
+		target := filepath.Join(dstDir, "2024", "a.jpg")
+		data, err := xattrGet(target, "com.apple.metadata:kMDItemUserTags")
+		if err != nil {
+			t.Fatalf("get xattr: %v", err)
+		}
+		if len(data) == 0 {
+			t.Error("expected non-empty xattr data")
+		}
+	} else {
+		if stats.SpotlightWrites != 0 {
+			t.Errorf("expected 0 spotlight writes on non-darwin, got %d", stats.SpotlightWrites)
+		}
+	}
+}
+
+func TestCopy_WriteSpotlight_DryRun(t *testing.T) {
+	srcDir := t.TempDir()
+	dstDir := t.TempDir()
+	srcFile := filepath.Join(srcDir, "a.jpg")
+	os.WriteFile(srcFile, []byte("hello"), 0644)
+
+	c := New(true, dstDir, collision.StrategyCounter)
+	c.WriteSpotlight = true
+
+	entries := []sorter.Entry{
+		{
+			Source: scanner.FileInfo{Path: srcFile, Name: "a.jpg", Ext: ".jpg", Size: 5},
+			Target: filepath.Join(dstDir, "2024", "a.jpg"),
+			Date:   time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC),
+		},
+	}
+
+	stats, err := c.Copy(context.Background(), entries, nil)
+	if err != nil {
+		t.Fatalf("copy: %v", err)
+	}
+	if stats.SpotlightWrites != 0 {
+		t.Errorf("expected 0 spotlight writes in dry-run, got %d", stats.SpotlightWrites)
+	}
+}
+
+// xattrGet читает расширенный атрибут файла (только для darwin).
+func xattrGet(path, name string) ([]byte, error) {
+	// Реализуется через platform-specific файл ниже.
+	return xattrGetImpl(path, name)
 }

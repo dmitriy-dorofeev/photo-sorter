@@ -44,19 +44,21 @@ type jsonDupGroup struct {
 }
 
 type jsonReport struct {
-	FilesFound      int            `json:"files_found"`
-	WithDate        int            `json:"with_date"`
-	UnsortedCount   int            `json:"unsorted_count"`
-	DuplicateCount  int            `json:"duplicate_count"`
-	Copied          int            `json:"copied"`
-	Skipped         int            `json:"skipped"`
-	Errors          int            `json:"errors"`
-	ExifWrites      int            `json:"exif_writes"`
-	ExifFailures    int            `json:"exif_failures"`
-	BytesCopied     int64          `json:"bytes_copied"`
-	ErrorList       []string       `json:"error_list,omitempty"`
-	DuplicateGroups []jsonDupGroup `json:"duplicate_groups"`
-	UnsortedFiles   []string       `json:"unsorted_files"`
+	FilesFound        int            `json:"files_found"`
+	WithDate          int            `json:"with_date"`
+	UnsortedCount     int            `json:"unsorted_count"`
+	DuplicateCount    int            `json:"duplicate_count"`
+	Copied            int            `json:"copied"`
+	Skipped           int            `json:"skipped"`
+	Errors            int            `json:"errors"`
+	ExifWrites        int            `json:"exif_writes"`
+	ExifFailures      int            `json:"exif_failures"`
+	SpotlightWrites   int            `json:"spotlight_writes"`
+	SpotlightFailures int            `json:"spotlight_failures"`
+	BytesCopied       int64          `json:"bytes_copied"`
+	ErrorList         []string       `json:"error_list,omitempty"`
+	DuplicateGroups   []jsonDupGroup `json:"duplicate_groups"`
+	UnsortedFiles     []string       `json:"unsorted_files"`
 }
 
 func main() {
@@ -83,6 +85,7 @@ func main() {
 		versionFlag       bool
 		checkUpdate       bool
 		writeExif         bool
+		writeSpotlight    bool
 		notifyFlag        bool
 		fullCheck         bool
 		resetState        bool
@@ -105,6 +108,7 @@ func main() {
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
 	flag.BoolVar(&writeExif, "write-exif", config.DefaultWriteExif, "Записывать определённую дату в EXIF (только имя/mtime)")
+	flag.BoolVar(&writeSpotlight, "write-spotlight", config.DefaultWriteSpotlight, "Записывать дату съёмки в Spotlight-теги macOS")
 	flag.BoolVar(&notifyFlag, "notify", config.DefaultNotify, "Показать системное уведомление по завершении")
 	flag.BoolVar(&fullCheck, "full-check", false, "Игнорировать state, пересортировать все файлы")
 	flag.BoolVar(&resetState, "reset-state", false, "Удалить state перед запуском")
@@ -129,6 +133,7 @@ func main() {
   --dry-run            Пробный прогон (default: true)
   --use-mtime          Fallback на дату изменения (default: true)
   --write-exif         Записывать дату в EXIF при копировании (default: false)
+  --write-spotlight    Записывать дату съёмки в Spotlight-теги macOS (default: false)
   --dup-strategy       Стратегия дедупликации: path | largest | newest | best-meta (default: path)
   --collision-strategy Стратегия конфликтов имён: counter | hash (default: counter)
 
@@ -180,6 +185,7 @@ func main() {
 		DupStrategy:       dupStrategy,
 		CollisionStrategy: collisionStrategy,
 		WriteExif:         writeExif,
+		WriteSpotlight:    writeSpotlight,
 		ExifToolPath:      exifPath,
 		FullCheck:         fullCheck,
 		DryRun:            dryRun,
@@ -421,6 +427,12 @@ func printTextReport(res runner.Result, stats copier.Stats) {
 	if stats.ExifFailures > 0 {
 		fmt.Printf("Ошибок EXIF:  %d\n", stats.ExifFailures)
 	}
+	if stats.SpotlightWrites > 0 {
+		fmt.Printf("Spotlight тегов: %d\n", stats.SpotlightWrites)
+	}
+	if stats.SpotlightFailures > 0 {
+		fmt.Printf("Ошибок Spotlight: %d\n", stats.SpotlightFailures)
+	}
 	if stats.BytesCopied > 0 {
 		fmt.Printf("Байт:         %d\n", stats.BytesCopied)
 	}
@@ -469,19 +481,21 @@ func printJSONReport(res runner.Result, stats copier.Stats) {
 	}
 
 	report := jsonReport{
-		FilesFound:      st.Total,
-		WithDate:        st.WithDate,
-		UnsortedCount:   st.Unsorted,
-		DuplicateCount:  st.Duplicates,
-		Copied:          stats.Copied,
-		Skipped:         stats.Skipped,
-		Errors:          stats.Errors,
-		ExifWrites:      stats.ExifWrites,
-		ExifFailures:    stats.ExifFailures,
-		BytesCopied:     stats.BytesCopied,
-		ErrorList:       errorStrings(stats.ErrorList),
-		DuplicateGroups: dupGroups,
-		UnsortedFiles:   unsortedFiles,
+		FilesFound:        st.Total,
+		WithDate:          st.WithDate,
+		UnsortedCount:     st.Unsorted,
+		DuplicateCount:    st.Duplicates,
+		Copied:            stats.Copied,
+		Skipped:           stats.Skipped,
+		Errors:            stats.Errors,
+		ExifWrites:        stats.ExifWrites,
+		ExifFailures:      stats.ExifFailures,
+		SpotlightWrites:   stats.SpotlightWrites,
+		SpotlightFailures: stats.SpotlightFailures,
+		BytesCopied:       stats.BytesCopied,
+		ErrorList:         errorStrings(stats.ErrorList),
+		DuplicateGroups:   dupGroups,
+		UnsortedFiles:     unsortedFiles,
 	}
 
 	enc := json.NewEncoder(os.Stdout)
@@ -518,6 +532,8 @@ func writeReportFile(cfg runner.Config, reportFormat string, res runner.Result, 
 		IntegrityFailures: stats.IntegrityFailures,
 		ExifWrites:        stats.ExifWrites,
 		ExifFailures:      stats.ExifFailures,
+		SpotlightWrites:   stats.SpotlightWrites,
+		SpotlightFailures: stats.SpotlightFailures,
 		BytesCopied:       stats.BytesCopied,
 		ErrorList:         stats.ErrorList,
 		Duplicates:        dupGroups,
