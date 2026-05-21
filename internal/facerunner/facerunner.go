@@ -182,7 +182,7 @@ func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *fac
 			// Извлекаем embedding для КАЖДОГО лица
 			var embeddings [][]float32
 			for _, box := range boxes {
-				faceImg := cropFace(img, box)
+				faceImg := facerecogn.AlignFace(img, box.Landmarks)
 				emb, err := r.recognizer.Embedding(ctx, faceImg)
 				if err != nil {
 					continue
@@ -314,33 +314,6 @@ func decodeHEIC(path string) (image.Image, error) {
 	defer f.Close()
 	img, _, err := image.Decode(f)
 	return img, err
-}
-
-func cropFace(img image.Image, box facedetect.FaceBox) image.Image {
-	bounds := img.Bounds()
-	minX := bounds.Min.X
-	minY := bounds.Min.Y
-
-	x1 := int(box.X1) + minX
-	y1 := int(box.Y1) + minY
-	x2 := int(box.X2) + minX
-	y2 := int(box.Y2) + minY
-
-	if x1 < bounds.Min.X {
-		x1 = bounds.Min.X
-	}
-	if y1 < bounds.Min.Y {
-		y1 = bounds.Min.Y
-	}
-	if x2 > bounds.Max.X {
-		x2 = bounds.Max.X
-	}
-	if y2 > bounds.Max.Y {
-		y2 = bounds.Max.Y
-	}
-
-	rect := image.Rect(x1, y1, x2, y2)
-	return cropImage(img, rect)
 }
 
 func cropImage(img image.Image, rect image.Rectangle) image.Image {

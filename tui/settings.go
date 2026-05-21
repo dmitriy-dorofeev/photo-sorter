@@ -193,6 +193,16 @@ func newSettingsModel() settingsModel {
 				stringValue:  config.DefaultSortMode,
 			},
 			{
+				label:        "Порог сходства лиц",
+				key:          "face_similarity",
+				help:         "Чем ниже — тем больше лиц объединяется в одного человека (face-режим)",
+				stype:        settingTypeChoice,
+				choices:      []string{"Строгий (0.65)", "Средний (0.55)", "Мягкий (0.45)"},
+				choiceValues: []string{"0.65", "0.55", "0.45"},
+				choiceIdx:    1,
+				stringValue:  "0.55",
+			},
+			{
 				label:     "Группировать Live Photos",
 				key:       "live_photos",
 				help:      "Не считать .heic + .mov дубликатами (Live Photos)",
@@ -437,14 +447,20 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case tea.KeyUp:
-			if m.settings.cursor > 0 {
+			for m.settings.cursor > 0 {
 				m.settings.cursor--
+				if m.isSettingVisible(m.settings.items[m.settings.cursor]) {
+					break
+				}
 			}
 			return m, nil
 
 		case tea.KeyDown:
-			if m.settings.cursor < len(m.settings.items)-1 {
+			for m.settings.cursor < len(m.settings.items)-1 {
 				m.settings.cursor++
+				if m.isSettingVisible(m.settings.items[m.settings.cursor]) {
+					break
+				}
 			}
 			return m, nil
 
@@ -494,6 +510,17 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 						mode = ThemeModeDark
 					}
 					m.applyThemeMode(mode)
+				}
+				if item.key == "sort_mode" && item.stringValue == "date" {
+					// Скрыли face_similarity — сдвигаем курсор, если он на ней
+					if m.settings.items[m.settings.cursor].key == "face_similarity" {
+						for m.settings.cursor > 0 {
+							m.settings.cursor--
+							if m.isSettingVisible(m.settings.items[m.settings.cursor]) {
+								break
+							}
+						}
+					}
 				}
 				return m, nil
 			default:
@@ -546,6 +573,9 @@ func (m Model) viewSettings() string {
 
 	// Список настроек
 	for i, item := range m.settings.items {
+		if !m.isSettingVisible(item) {
+			continue
+		}
 		cursor := "  "
 		if m.settings.cursor == i {
 			cursor = m.theme.Highlight.Render("▸ ")
@@ -673,6 +703,14 @@ func (m Model) GetSettingString(key string) string {
 		}
 	}
 	return ""
+}
+
+// isSettingVisible возвращает false для настроек, которые неактуальны в текущем режиме.
+func (m Model) isSettingVisible(item setting) bool {
+	if item.key == "face_similarity" {
+		return m.GetSettingString("sort_mode") == "face"
+	}
+	return true
 }
 
 // concurrency возвращает число потоков копирования из настроек TUI.

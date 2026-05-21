@@ -117,6 +117,9 @@ func (m Model) updateCopy(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			_ = m.st.Update(records)
 			_ = m.st.Cleanup(m.allPaths)
+			if len(m.faceAliases) > 0 {
+				_ = m.st.UpdateFaceAliases(m.faceAliases)
+			}
 			_ = m.st.Close()
 			m.st = nil
 		}

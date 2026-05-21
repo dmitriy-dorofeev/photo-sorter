@@ -11,6 +11,7 @@ import (
 	"photo-sorter/internal/state"
 	"photo-sorter/internal/updater"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -60,6 +61,15 @@ type Model struct {
 	previewDirCache   []string
 	previewCountCache map[string]int
 	previewFileCache  map[string][]string
+
+	// Face preview (только при sort_mode == "face")
+	faceAliasList        []string            // отсортированный список уникальных alias'ов
+	faceAliasCursor      int                 // позиция курсора
+	faceAliasRenaming    bool                // режим редактирования имени
+	faceAliasInput       textinput.Model     // поле ввода нового имени
+	faceAliasSamples     map[string][]string // примеры файлов (basename) для каждого alias'а
+	faceAliasFullSamples map[string]string   // полный путь к первому файлу alias'а (для просмотра)
+	faceAliasViewing     bool                // режим просмотра примера файла
 
 	// Копирование
 	copyCancel   context.CancelFunc
@@ -214,6 +224,13 @@ func (m Model) resetToSources() (tea.Model, tea.Cmd) {
 	m.previewDirCache = nil
 	m.previewCountCache = nil
 	m.previewFileCache = nil
+	m.faceAliasList = nil
+	m.faceAliasCursor = 0
+	m.faceAliasRenaming = false
+	m.faceAliasInput = textinput.Model{}
+	m.faceAliasSamples = nil
+	m.faceAliasFullSamples = nil
+	m.faceAliasViewing = false
 	m.sources = newSourcesModel()
 	m.target = newTargetModel()
 	m.quickStart = newQuickStartModel()

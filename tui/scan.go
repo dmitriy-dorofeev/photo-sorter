@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"photo-sorter/internal/deduper"
@@ -129,7 +130,7 @@ func (m Model) startScan() (Model, tea.Cmd) {
 		Concurrency:       m.concurrency(),
 		SortMode:          m.GetSettingString("sort_mode"),
 		FaceModelPath:     filepath.Join(os.Getenv("HOME"), ".photo-sorter", "models"),
-		FaceSimilarity:    0.6,
+		FaceSimilarity:    parseFaceSimilarity(m.GetSettingString("face_similarity")),
 	}
 
 	// Закрываем предыдущее состояние, если оно осталось от прошлого запуска.
@@ -394,4 +395,12 @@ func humanBytes(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
+func parseFaceSimilarity(s string) float32 {
+	v, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		return 0.55
+	}
+	return float32(v)
 }

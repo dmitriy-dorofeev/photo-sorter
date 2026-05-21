@@ -17,7 +17,7 @@ import (
 
 const (
 	inputSize   = 640
-	scoreThresh = 0.7
+	scoreThresh = 0.5
 	nmsThresh   = 0.3
 	topK        = 50
 )
