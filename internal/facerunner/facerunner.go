@@ -7,8 +7,13 @@ import (
 	"context"
 	"fmt"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -266,7 +271,39 @@ func isImageExt(ext string) bool {
 
 func loadImage(path string) (image.Image, error) {
 	// #nosec G304 — path приходит из scanner.FileInfo, проверенного при обходе файловой системы.
-	f, err := os.Open(filepath.Clean(path))
+	cleanPath := filepath.Clean(path)
+	f, err := os.Open(cleanPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	img, format, err := image.Decode(f)
+	if err == nil {
+		return img, nil
+	}
+	// Если формат неизвестен и это HEIC/HEIF — пробуем конвертировать через sips (macOS)
+	if isHEICExt(filepath.Ext(path)) && runtime.GOOS == "darwin" {
+		return decodeHEIC(cleanPath)
+	}
+	_ = format // игнорируем формат при ошибке
+	return nil, err
+}
+
+func isHEICExt(ext string) bool {
+	ext = strings.ToLower(ext)
+	return ext == ".heic" || ext == ".heif"
+}
+
+// decodeHEIC конвертирует HEIC/HEIF во временный JPEG через sips (macOS) и декодирует его.
+func decodeHEIC(path string) (image.Image, error) {
+	tmpFile := path + ".tmp.jpg"
+	cmd := exec.Command("sips", "-s", "format", "jpeg", path, "--out", tmpFile)
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("sips convert: %w", err)
+	}
+	defer os.Remove(tmpFile)
+
+	f, err := os.Open(tmpFile)
 	if err != nil {
 		return nil, err
 	}

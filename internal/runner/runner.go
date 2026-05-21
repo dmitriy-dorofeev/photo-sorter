@@ -288,17 +288,19 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		}
 		faceRunner, err := facerunner.NewRunner(faceCfg)
 		if err != nil {
-			// Face-модели не найдены — предупреждаем, но не прерываем pipeline.
-			// Fallback на date-режим.
-			fmt.Fprintf(os.Stderr, "⚠ Face-кластеризация недоступна: %v\n", err)
-		} else {
-			defer faceRunner.Close()
-			if err := faceRunner.ApplyClustering(ctx, res.Entries, aliasMgr); err != nil {
-				fmt.Fprintf(os.Stderr, "⚠ Ошибка face-кластеризации: %v\n", err)
-			} else {
-				res.FaceAliases = aliasMgr.AllKeys()
+			if st != nil {
+				_ = st.Close()
 			}
+			return res, fmt.Errorf("face-кластеризация недоступна: %w", err)
 		}
+		defer faceRunner.Close()
+		if err := faceRunner.ApplyClustering(ctx, res.Entries, aliasMgr); err != nil {
+			if st != nil {
+				_ = st.Close()
+			}
+			return res, fmt.Errorf("ошибка face-кластеризации: %w", err)
+		}
+		res.FaceAliases = aliasMgr.AllKeys()
 	}
 
 	res.State = st

@@ -90,18 +90,34 @@ func (d *Detector) Detect(ctx context.Context, img image.Image) ([]FaceBox, erro
 }
 
 // preprocess преобразует image.Image в NCHW float32 тензор.
+// Использует letterbox (сохранение aspect ratio + паддинг до inputSize),
+// как в референсной реализации OpenCV FaceDetectorYN.
 func preprocess(img image.Image) (data []float32, origW, origH int) {
 	bounds := img.Bounds()
 	origW = bounds.Dx()
 	origH = bounds.Dy()
 
-	// Resize to inputSize x inputSize (stretch)
+	// Масштабируем с сохранением пропорций, чтобы поместиться в inputSize.
+	// Если изображение меньше inputSize — просто центрируем без upscale.
+	var newW, newH int
+	if origW <= inputSize && origH <= inputSize {
+		newW, newH = origW, origH
+	} else {
+		scale := min(float64(inputSize)/float64(origW), float64(inputSize)/float64(origH))
+		newW = int(float64(origW) * scale)
+		newH = int(float64(origH) * scale)
+	}
+
 	data = make([]float32, 3*inputSize*inputSize)
 	for y := 0; y < inputSize; y++ {
 		for x := 0; x < inputSize; x++ {
-			srcX := float64(x) * float64(origW) / float64(inputSize)
-			srcY := float64(y) * float64(origH) / float64(inputSize)
-			r, g, b := sampleRGB(img, srcX, srcY)
+			var r, g, b float32
+			if x < newW && y < newH {
+				srcX := float64(x) * float64(origW) / float64(newW)
+				srcY := float64(y) * float64(origH) / float64(newH)
+				r, g, b = sampleRGB(img, srcX, srcY)
+			}
+			// padding — уже нули
 			idx := y*inputSize + x
 			data[0*inputSize*inputSize+idx] = r // R
 			data[1*inputSize*inputSize+idx] = g // G
@@ -109,6 +125,13 @@ func preprocess(img image.Image) (data []float32, origW, origH int) {
 		}
 	}
 	return data, origW, origH
+}
+
+func min(a, b float64) float64 {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 // sampleRGB выполняет билинейную интерполяцию пикселя.
@@ -311,8 +334,8 @@ func nms(faces []FaceBox, threshold float32, maxCount int) []int {
 func iou(a, b FaceBox) float32 {
 	x1 := max(a.X1, b.X1)
 	y1 := max(a.Y1, b.Y1)
-	x2 := min(a.X2, b.X2)
-	y2 := min(a.Y2, b.Y2)
+	x2 := min32(a.X2, b.X2)
+	y2 := min32(a.Y2, b.Y2)
 
 	inter := max(0, x2-x1) * max(0, y2-y1)
 	areaA := (a.X2 - a.X1) * (a.Y2 - a.Y1)
@@ -330,7 +353,7 @@ func max(a, b float32) float32 {
 	}
 	return b
 }
-func min(a, b float32) float32 {
+func min32(a, b float32) float32 {
 	if a < b {
 		return a
 	}
