@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/dmitriy-dorofeev/photo-sorter)](https://github.com/dmitriy-dorofeev/photo-sorter/releases/latest)
 [![CI](https://github.com/dmitriy-dorofeev/photo-sorter/actions/workflows/ci.yml/badge.svg)](https://github.com/dmitriy-dorofeev/photo-sorter/actions/workflows/ci.yml)
-[![Go Version](https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go)](https://go.dev)
+[![Go Version](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go)](https://go.dev)
 [![License](https://img.shields.io/github/license/dmitriy-dorofeev/photo-sorter)](LICENSE)
 
 Консольное TUI-приложение на Go для организации фотографий и видео с разных устройств (iPhone, Android, компьютер и т.д.).
