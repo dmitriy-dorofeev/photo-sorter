@@ -36,9 +36,11 @@ type scanResultMsg struct {
 
 // runnerProgressMsg передаёт прогресс из runner.Run в TUI.
 type runnerProgressMsg struct {
-	stage   string
-	current int
-	total   int
+	stage        string
+	current      int
+	total        int
+	bytesCurrent int64
+	bytesTotal   int64
 }
 
 // progressListenCmd читает прогресс из канала и возвращает его как сообщение.
@@ -79,15 +81,17 @@ var scanStageNames = []string{
 }
 
 type scanModel struct {
-	width      int
-	height     int
-	running    bool
-	stage      scanStage
-	progress   float64 // 0..100
-	done       bool
-	errMsg     string
-	aborted    bool                   // true если пользователь прервал или ушёл назад
-	progressCh chan runnerProgressMsg // канал для прогресса из runner.Run
+	width             int
+	height            int
+	running           bool
+	stage             scanStage
+	progress          float64 // 0..100
+	done              bool
+	errMsg            string
+	aborted           bool                   // true если пользователь прервал или ушёл назад
+	progressCh        chan runnerProgressMsg // канал для прогресса из runner.Run
+	modelBytesCurrent int64
+	modelBytesTotal   int64
 }
 
 func newScanModel() scanModel {
@@ -150,7 +154,15 @@ func (m Model) startScan() (Model, tea.Cmd) {
 				case <-ctx.Done():
 				}
 			}
-			if err := facemodels.EnsureModels(cfg.FaceModelPath, nil); err != nil {
+			if err := facemodels.EnsureModels(cfg.FaceModelPath, func(current, total int64) {
+				if progressCh == nil {
+					return
+				}
+				select {
+				case progressCh <- runnerProgressMsg{stage: "models", bytesCurrent: current, bytesTotal: total}:
+				case <-ctx.Done():
+				}
+			}); err != nil {
 				if progressCh != nil {
 					close(progressCh)
 				}
@@ -202,6 +214,13 @@ func (m Model) updateScan(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.stage {
 		case "models":
 			m.scan.stage = scanStageDownloadModels
+			m.scan.modelBytesCurrent = msg.bytesCurrent
+			m.scan.modelBytesTotal = msg.bytesTotal
+			if msg.bytesTotal > 0 {
+				m.scan.progress = float64(msg.bytesCurrent) / float64(msg.bytesTotal) * 100
+			} else {
+				m.scan.progress = 0
+			}
 			return m, progressListenCmd(m.scan.progressCh)
 		case "scan":
 			m.scan.stage = scanStageScanning
@@ -317,7 +336,15 @@ func (m Model) viewScan() string {
 	b.WriteString("\n")
 
 	if m.scan.stage >= 0 && int(m.scan.stage) < len(scanStageNames) {
-		b.WriteString(scanStageNames[m.scan.stage] + "\n")
+		b.WriteString(scanStageNames[m.scan.stage])
+		if m.scan.stage == scanStageDownloadModels {
+			if m.scan.modelBytesTotal > 0 {
+				b.WriteString(fmt.Sprintf(" (%s / %s)", humanBytes(m.scan.modelBytesCurrent), humanBytes(m.scan.modelBytesTotal)))
+			} else if m.scan.modelBytesCurrent > 0 {
+				b.WriteString(fmt.Sprintf(" (скачано %s)", humanBytes(m.scan.modelBytesCurrent)))
+			}
+		}
+		b.WriteString("\n")
 	}
 
 	if m.scan.done {
@@ -353,4 +380,18 @@ func (m Model) computeScanStats() scanStats {
 		unsorted:   st.Unsorted,
 		duplicates: st.Duplicates,
 	}
+}
+
+// humanBytes форматирует размер в человекочитаемый вид (B, KB, MB, GB).
+func humanBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }

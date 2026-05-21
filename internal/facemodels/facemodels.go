@@ -26,9 +26,40 @@ const (
 	downloadTimeout = 5 * time.Minute
 )
 
+// progressReader оборачивает io.Reader и вызывает onProg при изменении прогресса.
+type progressReader struct {
+	r       io.Reader
+	total   int64
+	current int64
+	onProg  func(current, total int64)
+	lastPct int
+}
+
+func (pr *progressReader) Read(p []byte) (int, error) {
+	n, err := pr.r.Read(p)
+	pr.current += int64(n)
+	if pr.onProg != nil {
+		if pr.total > 0 {
+			pct := int(pr.current * 100 / pr.total)
+			if pct != pr.lastPct {
+				pr.lastPct = pct
+				pr.onProg(pr.current, pr.total)
+			}
+		} else {
+			const chunk = 256 * 1024
+			if pr.current >= int64(pr.lastPct)*chunk {
+				pr.lastPct = int(pr.current / chunk)
+				pr.onProg(pr.current, pr.total)
+			}
+		}
+	}
+	return n, err
+}
+
 // EnsureModels проверяет наличие ONNX-моделей в modelDir и скачивает
-// недостающие. Прогресс сообщений передаётся через progress callback.
-func EnsureModels(modelDir string, progress func(msg string)) error {
+// недостающие. Прогресс передаётся через progress callback в байтах
+// (current, total). Если total == 0, размер заранее неизвестен.
+func EnsureModels(modelDir string, progress func(current, total int64)) error {
 	if err := os.MkdirAll(modelDir, 0750); err != nil {
 		return fmt.Errorf("не удалось создать директорию моделей: %w", err)
 	}
@@ -38,18 +69,18 @@ func EnsureModels(modelDir string, progress func(msg string)) error {
 
 	if _, err := os.Stat(detPath); os.IsNotExist(err) {
 		if progress != nil {
-			progress("Скачивание модели детекции лиц (YuNet)...")
+			progress(0, 0)
 		}
-		if err := downloadFile(detectionURL, detPath); err != nil {
+		if err := downloadFile(detectionURL, detPath, progress); err != nil {
 			return fmt.Errorf("не удалось скачать YuNet: %w", err)
 		}
 	}
 
 	if _, err := os.Stat(recPath); os.IsNotExist(err) {
 		if progress != nil {
-			progress("Скачивание модели распознавания лиц (ArcFace)...")
+			progress(0, 0)
 		}
-		if err := downloadAndExtractRecognition(modelDir); err != nil {
+		if err := downloadAndExtractRecognition(modelDir, progress); err != nil {
 			return fmt.Errorf("не удалось скачать ArcFace: %w", err)
 		}
 	}
@@ -69,7 +100,7 @@ func ModelsExist(modelDir string) bool {
 }
 
 //nolint:gosec // G107: URL — внутренние константы пакета, не пользовательский ввод.
-func downloadFile(url, dest string) error {
+func downloadFile(url, dest string, progress func(current, total int64)) error {
 	client := &http.Client{Timeout: downloadTimeout}
 	resp, err := client.Get(url)
 	if err != nil {
@@ -81,6 +112,11 @@ func downloadFile(url, dest string) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
+	var total int64
+	if resp.ContentLength > 0 {
+		total = resp.ContentLength
+	}
+
 	cleanDest := filepath.Clean(dest)
 	//nolint:gosec // G304: путь формируется из констант и проверенного modelDir.
 	out, err := os.Create(cleanDest)
@@ -89,12 +125,17 @@ func downloadFile(url, dest string) error {
 	}
 	defer out.Close()
 
-	_, err = io.CopyN(out, resp.Body, maxModelSize)
+	var src io.Reader = resp.Body
+	if progress != nil {
+		src = &progressReader{r: resp.Body, total: total, onProg: progress}
+	}
+
+	_, err = io.Copy(out, io.LimitReader(src, maxModelSize))
 	return err
 }
 
 //nolint:gosec // G107: URL — внутренняя константа пакета.
-func downloadAndExtractRecognition(modelDir string) error {
+func downloadAndExtractRecognition(modelDir string, progress func(current, total int64)) error {
 	// Скачиваем zip во временный файл.
 	tmpZip, err := os.CreateTemp("", "buffalo_s_*.zip")
 	if err != nil {
@@ -113,7 +154,17 @@ func downloadAndExtractRecognition(modelDir string) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	if _, err := io.CopyN(tmpZip, resp.Body, maxModelSize); err != nil {
+	var total int64
+	if resp.ContentLength > 0 {
+		total = resp.ContentLength
+	}
+
+	var src io.Reader = resp.Body
+	if progress != nil {
+		src = &progressReader{r: resp.Body, total: total, onProg: progress}
+	}
+
+	if _, err := io.Copy(tmpZip, io.LimitReader(src, maxModelSize)); err != nil {
 		return err
 	}
 	if err := tmpZip.Close(); err != nil {
@@ -152,6 +203,6 @@ func downloadAndExtractRecognition(modelDir string) error {
 	}
 	defer out.Close()
 
-	_, err = io.CopyN(out, rc, maxModelSize)
+	_, err = io.Copy(out, io.LimitReader(rc, maxModelSize))
 	return err
 }

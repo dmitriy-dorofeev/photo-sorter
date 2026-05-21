@@ -323,12 +323,19 @@ func runCLI(cfg runner.Config, dryRun bool, format, reportFormat string, notifyF
 
 	// При необходимости скачиваем ONNX-модели перед запуском face-режима.
 	if cfg.SortMode == "face" && !facemodels.ModelsExist(cfg.FaceModelPath) {
-		fmt.Fprintln(os.Stderr, "Скачивание ONNX-моделей для face-режима...")
-		if err := facemodels.EnsureModels(cfg.FaceModelPath, func(msg string) {
-			fmt.Fprintln(os.Stderr, msg)
+		fmt.Fprint(os.Stderr, "Скачивание ONNX-моделей для face-режима...")
+		if err := facemodels.EnsureModels(cfg.FaceModelPath, func(current, total int64) {
+			if total > 0 {
+				pct := float64(current) / float64(total) * 100
+				fmt.Fprintf(os.Stderr, "\rСкачивание ONNX-моделей... %.1f%% (%s / %s) ", pct, humanBytes(current), humanBytes(total))
+			} else {
+				fmt.Fprintf(os.Stderr, "\rСкачивание ONNX-моделей... %s ", humanBytes(current))
+			}
 		}); err != nil {
+			fmt.Fprintln(os.Stderr)
 			return fmt.Errorf("не удалось подготовить модели: %w", err)
 		}
+		fmt.Fprintln(os.Stderr)
 	}
 
 	res, err := runner.Run(ctx, cfg, func(stage string, current, total int) {
@@ -573,4 +580,18 @@ func writeReportFile(cfg runner.Config, reportFormat string, res runner.Result, 
 		fmt.Fprintf(os.Stderr, "Отчёт сохранён: %s\n", path)
 	}
 	return err
+}
+
+// humanBytes форматирует размер в человекочитаемый вид (B, KB, MB, GB).
+func humanBytes(b int64) string {
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
 }
