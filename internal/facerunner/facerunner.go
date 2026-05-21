@@ -89,52 +89,69 @@ func (r *Runner) Close() {
 }
 
 // ApplyClustering выполняет face-кластеризацию над всеми entries
-// и обновляет TargetPath: <alias>/<filename> (или no_faces/<filename>).
-func (r *Runner) ApplyClustering(ctx context.Context, entries []sorter.Entry, aliasMgr *facealias.Manager) error {
+// и возвращает новый срез entries, где файл с несколькими лицами
+// представлен несколькими Entry (по одному на каждый alias).
+func (r *Runner) ApplyClustering(ctx context.Context, entries []sorter.Entry, aliasMgr *facealias.Manager) ([]sorter.Entry, error) {
 	if r.detector == nil || r.recognizer == nil {
-		return fmt.Errorf("face models not loaded")
+		return nil, fmt.Errorf("face models not loaded")
 	}
 
 	// Собираем пути всех non-skip entries
 	paths := make([]string, 0, len(entries))
-	for _, e := range entries {
+	entryIndex := make(map[string][]int, len(entries)) // path → индексы в entries
+	for i, e := range entries {
 		if e.Skip {
 			continue
 		}
 		paths = append(paths, e.Source.Path)
+		entryIndex[e.Source.Path] = append(entryIndex[e.Source.Path], i)
 	}
 
 	// Кластеризуем все файлы глобально (без группировки по датам)
 	aliases, err := r.clusterGroup(ctx, paths, aliasMgr)
 	if err != nil {
-		return fmt.Errorf("face clustering: %w", err)
+		return nil, fmt.Errorf("face clustering: %w", err)
 	}
 
-	// Обновляем TargetPath: полностью заменяем на <alias>/<basename>
+	// Строим новый срез entries: дублируем Entry для каждого alias'а
+	var result []sorter.Entry
 	for i := range entries {
 		if entries[i].Skip {
+			result = append(result, entries[i])
 			continue
 		}
-		alias := aliases[entries[i].Source.Path]
-		if alias == "" {
-			alias = noFacesAlias
+		path := entries[i].Source.Path
+		fileAliases := aliases[path]
+		if len(fileAliases) == 0 {
+			// Нет лиц → папка no_faces
+			base := filepath.Base(entries[i].Target)
+			entries[i].Target = filepath.Join(r.cfg.TargetRoot, noFacesAlias, base)
+			result = append(result, entries[i])
+			continue
 		}
-		base := filepath.Base(entries[i].Target)
-		entries[i].Target = filepath.Join(r.cfg.TargetRoot, alias, base)
+		// Есть одно или несколько лиц → дублируем Entry для каждого alias
+		for _, alias := range fileAliases {
+			base := filepath.Base(entries[i].Target)
+			newEntry := entries[i]
+			newEntry.Target = filepath.Join(r.cfg.TargetRoot, alias, base)
+			result = append(result, newEntry)
+		}
 	}
 
-	return nil
+	return result, nil
 }
 
 // clusterGroup обрабатывает все файлы глобально (без разбивки по датам).
-func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *facealias.Manager) (map[string]string, error) {
+// Возвращает map: путь к файлу → список alias'ов (по одному на каждое уникальное лицо).
+func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *facealias.Manager) (map[string][]string, error) {
 
-	type faceInfo struct {
-		path      string
-		embedding []float32
+	// faceInfo хранит все embedding'и для конкретного файла
+	type fileFaces struct {
+		path       string
+		embeddings [][]float32 // embedding каждого найденного лица
 	}
 
-	var faces []faceInfo
+	var files []fileFaces
 	var mu sync.Mutex
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -162,17 +179,23 @@ func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *fac
 				return nil
 			}
 
-			// Берём доминантное лицо (самое большое)
-			dominant := pickDominant(boxes)
-			faceImg := cropFace(img, dominant)
+			// Извлекаем embedding для КАЖДОГО лица
+			var embeddings [][]float32
+			for _, box := range boxes {
+				faceImg := cropFace(img, box)
+				emb, err := r.recognizer.Embedding(ctx, faceImg)
+				if err != nil {
+					continue
+				}
+				embeddings = append(embeddings, emb)
+			}
 
-			emb, err := r.recognizer.Embedding(ctx, faceImg)
-			if err != nil {
+			if len(embeddings) == 0 {
 				return nil
 			}
 
 			mu.Lock()
-			faces = append(faces, faceInfo{path: path, embedding: emb})
+			files = append(files, fileFaces{path: path, embeddings: embeddings})
 			mu.Unlock()
 			return nil
 		})
@@ -182,45 +205,60 @@ func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *fac
 		return nil, err
 	}
 
-	result := make(map[string]string, len(paths))
+	result := make(map[string][]string, len(paths))
 
-	if len(faces) == 0 {
+	if len(files) == 0 {
 		// Нет лиц ни на одном фото — все в no_faces
 		for _, p := range paths {
-			result[p] = noFacesAlias
+			result[p] = nil
 		}
 		return result, nil
 	}
 
-	// Кластеризация
-	embeddings := make([][]float32, len(faces))
-	for i, f := range faces {
-		embeddings[i] = f.embedding
+	// Кластеризация: собираем ВСЕ лица со всех фото в один пул
+	allEmbeddings := make([][]float32, 0, len(files)*2)
+	for _, f := range files {
+		allEmbeddings = append(allEmbeddings, f.embeddings...)
 	}
-	clusters := facecluster.Clusterize(embeddings, r.cfg.Similarity)
+	clusters := facecluster.Clusterize(allEmbeddings, r.cfg.Similarity)
 
-	// Группируем по clusterID
-	clusterMembers := make(map[int][]faceInfo)
-	for i, c := range clusters {
-		clusterMembers[c.ClusterID] = append(clusterMembers[c.ClusterID], faces[i])
-	}
-
-	// Назначаем alias каждому кластеру
-	for _, members := range clusterMembers {
-		clusterEmbeddings := make([][]float32, len(members))
-		for i, m := range members {
-			clusterEmbeddings[i] = m.embedding
-		}
-		alias := aliasMgr.GetAlias("global", clusterEmbeddings)
-		for _, m := range members {
-			result[m.path] = alias
+	// Назначаем alias каждому кластеру (глобально — date="global")
+	clusterToAlias := make(map[int]string)
+	clusterMembers := make(map[int][][]float32)
+	embIdx := 0
+	for _, f := range files {
+		for range f.embeddings {
+			cid := clusters[embIdx].ClusterID
+			clusterMembers[cid] = append(clusterMembers[cid], allEmbeddings[embIdx])
+			embIdx++
 		}
 	}
+	for cid, members := range clusterMembers {
+		alias := aliasMgr.GetAlias("global", members)
+		clusterToAlias[cid] = alias
+	}
 
-	// Файлы без лиц → no_faces
+	// Для каждого файла собираем уникальные alias'ы его лиц
+	embIdx = 0
+	for _, f := range files {
+		seen := make(map[string]struct{})
+		var aliases []string
+		for range f.embeddings {
+			cid := clusters[embIdx].ClusterID
+			alias := clusterToAlias[cid]
+			if _, ok := seen[alias]; !ok {
+				seen[alias] = struct{}{}
+				aliases = append(aliases, alias)
+			}
+			embIdx++
+		}
+		result[f.path] = aliases
+	}
+
+	// Файлы без лиц → nil (no_faces)
 	for _, p := range paths {
 		if _, ok := result[p]; !ok {
-			result[p] = noFacesAlias
+			result[p] = nil
 		}
 	}
 
@@ -276,19 +314,6 @@ func decodeHEIC(path string) (image.Image, error) {
 	defer f.Close()
 	img, _, err := image.Decode(f)
 	return img, err
-}
-
-func pickDominant(boxes []facedetect.FaceBox) facedetect.FaceBox {
-	var best facedetect.FaceBox
-	var bestArea float32
-	for _, b := range boxes {
-		area := (b.X2 - b.X1) * (b.Y2 - b.Y1)
-		if area > bestArea {
-			bestArea = area
-			best = b
-		}
-	}
-	return best
 }
 
 func cropFace(img image.Image, box facedetect.FaceBox) image.Image {

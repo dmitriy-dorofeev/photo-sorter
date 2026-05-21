@@ -54,6 +54,7 @@ tar -xzf photo-sorter_Darwin_arm64.tar.gz
 # Face-кластеризация (группировка по людям)
 ./photo-sorter --source ~/Photos --target ~/Sorted --sort-mode=face --dry-run=false
 # Требуется ONNX Runtime. Модели скачиваются автоматически при первом запуске face-режима.
+# Фото с несколькими людьми будет скопировано в папку каждого найденного лица.
 ```
 
 ## Документация

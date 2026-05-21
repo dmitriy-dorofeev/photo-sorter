@@ -58,6 +58,23 @@ func (m *Manager) GetAlias(date string, embeddings [][]float32) string {
 	return alias
 }
 
+// GetAliases возвращает уникальные alias'ы для набора embedding'ов (например, все лица на одном фото).
+// Каждый embedding кластеризуется отдельно; результат дедуплицируется.
+func (m *Manager) GetAliases(date string, embeddings [][]float32) []string {
+	seen := make(map[string]struct{})
+	var res []string
+	for _, emb := range embeddings {
+		// Одиночный embedding оборачиваем в срез для совместимости с makeKey
+		single := [][]float32{emb}
+		alias := m.GetAlias(date, single)
+		if _, ok := seen[alias]; !ok {
+			seen[alias] = struct{}{}
+			res = append(res, alias)
+		}
+	}
+	return res
+}
+
 // GetAliasByKey возвращает alias по предвычисленному ключу.
 func (m *Manager) GetAliasByKey(key string) string {
 	m.mu.RLock()

@@ -208,13 +208,15 @@ make snapshot
 4. **dateresolver** — для каждого файла: EXIF (JPEG) → видео-метаданные (exiftool, если доступен) → парсинг имени (8 паттернов) → `mtime` (если включено `UseModTime`) → `unsorted/`. Источник даты (`DateSource`) прокидывается дальше в pipeline. Путь к `exiftool` передаётся через `runner.Config.ExifToolPath`.
 5. **deduper** — группирует файлы по размеру, внутри групп вычисляет `xxhash`, исключает пары Live Photos (`.HEIC` + `.MOV` с одинаковым basename) и пары RAW + JPEG (`.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename). Поддерживает межзапусковую дедупликацию через `knownHashes` (FullHash из state).
 6. **sorter** — строит план копирования: целевой путь по шаблону даты, разрешение коллизий (`_1`, `_2` или `_<hash>` в зависимости от стратегии через `internal/collision`), пометка дублей как `Skip`, Live Photos fallback (`.MOV` получает дату от `.HEIC` с тем же basename), RAW + JPEG fallback (RAW без даты получает дату от соответствующего JPEG/HEIC с тем же basename).
-7. **face-кластеризация** (опционально, при `SortMode == "face"`): после `sorter` для каждой датовой группы запускается `facerunner`:
-   - **facedetect** (YuNet ONNX) — находит лица на фото, возвращает bounding box + 5 landmarks.
-   - **facerecogn** (ArcFace MobileFaceNet ONNX) — извлекает 512-dim embedding для доминантного (самого большого) лица.
-   - **facecluster** (Chinese Whispers) — группирует embedding'и по cosine similarity ≥ порога (default 0.6).
+7. **face-кластеризация** (опционально, при `SortMode == "face"`): после `sorter` запускается `facerunner`:
+   - **facedetect** (YuNet ONNX) — находит ВСЕ лица на фото, возвращает bounding box + 5 landmarks.
+   - **facerecogn** (ArcFace MobileFaceNet ONNX) — извлекает 512-dim embedding для КАЖДОГО найденного лица.
+   - **facecluster** (Chinese Whispers) — группирует ВСЕ embedding'и со всех фото глобально по cosine similarity ≥ порога (default 0.6).
    - **facealias** — назначает имена кластерам (`unknown_1`, `unknown_2`… или заданные пользователем). Alias'ы сохраняются в `state` (bucket `face_aliases`) для восстановления при повторных запусках.
-   - TargetPath изменяется: `YYYY/MM-DD/<filename>` → `<alias>/<filename>`. Фото без лиц, видео и RAW → `no_faces/<filename>`.
+   - **Множественные лица**: если на фото несколько человек, файл копируется в папку **каждого** найденного лица (избыточно, но предсказуемо).
+   - TargetPath изменяется: `<alias>/<filename>`. Фото без лиц, видео и RAW → `no_faces/<filename>`.
    - Видео и RAW пропускаются (face-детекция только для изображений).
+   - **Инкрементальность в face-режиме**: поскольку один файл может копироваться в несколько папок, `state.Filter` и межзапусковая дедупликация по `RecordsBySize` отключены. Каждый запуск face-режима обрабатывает все файлы заново (deduper внутри запуска всё ещё помечает настоящие дубликаты как `Skip`).
 8. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
 9. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:
    - `text` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` (как раньше, строки с timestamp).
@@ -292,7 +294,7 @@ go test ./internal/ -run TestCancellation -v
 - **Дубликаты** — двухуровневая проверка (размер → хеш), чтобы не хешировать все файлы.
 - **Live Photos** — `.HEIC` + `.MOV` с одинаковым basename не считаются дублями друг друга; `.MOV` без даты получает дату от соответствующего `.HEIC`.
 - **RAW + JPEG кластеризация** — `.CR2`/`.NEF`/`.ARW`/`.DNG`/`.RAF` + `.JPG`/`.JPEG` с одинаковым basename не считаются дублями; RAW без даты получает дату от соответствующего JPEG. Включается флагом `--cluster-raw-jpeg` (default `true`).
-- **Face-кластеризация** — при `SortMode == "face"` фото группируются по людям внутри каждой даты (`YYYY/MM-DD/<alias>/`). Детекция через YuNet, recognition через ArcFace MobileFaceNet (ONNX Runtime). Если ONNX Runtime или модели не найдены — face-режим недоступен, fallback на `date`. Видео и RAW пропускаются (идут в `no_faces/` или обрабатываются без face-группировки).
+- **Face-кластеризация** — при `SortMode == "face"` фото группируются по людям глобально (без разбивки по датам): `<alias>/<filename>`. Детекция через YuNet находит **все** лица, recognition через ArcFace MobileFaceNet (ONNX Runtime) извлекает embedding для каждого. Фото с несколькими людьми копируется в папку **каждого** найденного лица. Если ONNX Runtime или модели не найдены — face-режим недоступен, fallback на `date`. Видео и RAW пропускаются (идут в `no_faces/`). В face-режиме инкрементальная фильтрация state отключена — каждый запуск обрабатывает все файлы заново.
 - **Коллизии имён** — если в целевой папке файл с таким именем уже есть, сравниваются хеши: совпадают → пропускаем, разные → суффикс по выбранной стратегии (`counter`: `_1`, `_2`; `hash`: `_a3f7b2`). Стратегия задаётся флагом `--collision-strategy` или в TUI. При `hash` один и тот же исходный файл всегда получает одинаковый суффикс (идемпотентность).
 - **Файлы без даты** — помещаются в `unsorted/` в корне целевой папки. Никогда не теряются.
 - **Недостаточно места** — `copier` проверяет свободное место через `unix.Statfs` перед началом копирования.

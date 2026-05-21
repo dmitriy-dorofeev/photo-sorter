@@ -148,12 +148,17 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	var knownHashes map[uint64]struct{}
 	var st *state.State
 
-	if !cfg.FullCheck && cfg.Target != "" && !cfg.DryRun {
+	// Face-режим требует обработки всех файлов заново (один файл может
+	// копироваться в несколько папок — инкрементальная фильтрация по state
+	// здесь неприменима в текущей реализации).
+	faceMode := cfg.SortMode == "face"
+
+	if cfg.Target != "" && !cfg.DryRun {
 		st, err = state.Open(cfg.Target)
 		if err != nil {
 			// Не прерываем pipeline — работаем без state.
 			st = nil
-		} else {
+		} else if !faceMode && !cfg.FullCheck {
 			toProcess, unchanged, err = st.Filter(files)
 			if err != nil {
 				_ = st.Close() // #nosec G104 — ошибка Filter важнее, закрываем state лучшей попыткой.
@@ -170,7 +175,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 		}
 	}
 
-	if cfg.FullCheck || st == nil {
+	if cfg.FullCheck || st == nil || faceMode {
 		toProcess = files
 	}
 
@@ -185,8 +190,11 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 	res.FastHashes = fastHashes
 
 	// 4. Межзапусковая верификация через FastHash → FullHash.
+	// В face-режиме отключаем: один файл может копироваться в несколько папок,
+	// а state хранит одну запись на source — межзапусковая дедупликация
+	// привела бы к пропуску дополнительных копий.
 	crossRunSkip := make(map[string]struct{})
-	if st != nil {
+	if st != nil && !faceMode {
 		for _, f := range toProcess {
 			if _, ok := crossRunSkip[f.Path]; ok {
 				continue
@@ -295,12 +303,14 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 			return res, fmt.Errorf("face-кластеризация недоступна: %w", err)
 		}
 		defer faceRunner.Close()
-		if err := faceRunner.ApplyClustering(ctx, res.Entries, aliasMgr); err != nil {
+		newEntries, err := faceRunner.ApplyClustering(ctx, res.Entries, aliasMgr)
+		if err != nil {
 			if st != nil {
 				_ = st.Close()
 			}
 			return res, fmt.Errorf("ошибка face-кластеризации: %w", err)
 		}
+		res.Entries = newEntries
 		res.FaceAliases = aliasMgr.AllKeys()
 	}
 
