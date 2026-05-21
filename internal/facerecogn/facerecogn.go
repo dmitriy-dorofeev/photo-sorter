@@ -328,10 +328,10 @@ func sampleColor(img image.Image, x, y float64) color.Color {
 	a := lerp(lerp(c00.a, c10.a, dx), lerp(c01.a, c11.a, dx), dy)
 
 	return color.RGBA{
-		R: uint8(clampInt(int(r), 0, 255)),
-		G: uint8(clampInt(int(g), 0, 255)),
-		B: uint8(clampInt(int(b), 0, 255)),
-		A: uint8(clampInt(int(a), 0, 255)),
+		R: clampUint8(int(r)),
+		G: clampUint8(int(g)),
+		B: clampUint8(int(b)),
+		A: clampUint8(int(a)),
 	}
 }
 
@@ -347,14 +347,14 @@ func pixelRGBA(c color.Color) rgba {
 	}
 }
 
-func clampInt(v, min, max int) int {
-	if v < min {
-		return min
+func clampUint8(v int) uint8 {
+	if v < 0 {
+		return 0
 	}
-	if v > max {
-		return max
+	if v > 255 {
+		return 255
 	}
-	return v
+	return uint8(v)
 }
 
 func abs(v float32) float32 {

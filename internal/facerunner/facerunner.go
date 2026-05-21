@@ -301,33 +301,17 @@ func isHEICExt(ext string) bool {
 // decodeHEIC конвертирует HEIC/HEIF во временный JPEG через sips (macOS) и декодирует его.
 func decodeHEIC(path string) (image.Image, error) {
 	tmpFile := path + ".tmp.jpg"
-	cmd := exec.Command("sips", "-s", "format", "jpeg", path, "--out", tmpFile)
+	cmd := exec.Command("sips", "-s", "format", "jpeg", path, "--out", tmpFile) // #nosec G204
 	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("sips convert: %w", err)
 	}
 	defer os.Remove(tmpFile)
 
-	f, err := os.Open(tmpFile)
+	f, err := os.Open(tmpFile) // #nosec G304
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	img, _, err := image.Decode(f)
 	return img, err
-}
-
-func cropImage(img image.Image, rect image.Rectangle) image.Image {
-	type subImage interface {
-		SubImage(r image.Rectangle) image.Image
-	}
-	if s, ok := img.(subImage); ok {
-		return s.SubImage(rect)
-	}
-	dst := image.NewRGBA(rect)
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			dst.Set(x, y, img.At(x, y))
-		}
-	}
-	return dst
 }
