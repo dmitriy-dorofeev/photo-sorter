@@ -282,6 +282,7 @@ func Run(ctx context.Context, cfg Config, progress func(stage string, current, t
 			ModelPath:   cfg.FaceModelPath,
 			Similarity:  cfg.FaceSimilarity,
 			Concurrency: cfg.Concurrency,
+			TargetRoot:  cfg.Target,
 		}
 		if faceCfg.ModelPath == "" {
 			faceCfg.ModelPath = filepath.Join(os.Getenv("HOME"), ".photo-sorter", "models")

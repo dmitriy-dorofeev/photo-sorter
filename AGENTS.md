@@ -213,7 +213,7 @@ make snapshot
    - **facerecogn** (ArcFace MobileFaceNet ONNX) — извлекает 512-dim embedding для доминантного (самого большого) лица.
    - **facecluster** (Chinese Whispers) — группирует embedding'и по cosine similarity ≥ порога (default 0.6).
    - **facealias** — назначает имена кластерам (`unknown_1`, `unknown_2`… или заданные пользователем). Alias'ы сохраняются в `state` (bucket `face_aliases`) для восстановления при повторных запусках.
-   - TargetPath изменяется: `YYYY/MM-DD/` → `YYYY/MM-DD/<alias>/`. Фото без лиц → `YYYY/MM-DD/no_faces/`.
+   - TargetPath изменяется: `YYYY/MM-DD/<filename>` → `<alias>/<filename>`. Фото без лиц, видео и RAW → `no_faces/<filename>`.
    - Видео и RAW пропускаются (face-детекция только для изображений).
 8. **copier** — выполняет копирование: проверка свободного места (`unix.Statfs`), создание директорий, обработка внешних коллизий по хешу с учётом выбранной стратегии (`counter`/`hash`), обновление `Entry.Target` при изменении имени, **post-copy проверка целостности** (сверка xxhash исходника и копии после atomic rename), **обратная синхронизация метаданных** (опциональная запись `DateTimeOriginal` через `exiftool`, если дата была определена по имени/mtime), поддержка `context.Context` (отмена), progress callback.
 9. **report** — после копирования создаёт файл отчёта в целевой папке. Поддерживает два формата:

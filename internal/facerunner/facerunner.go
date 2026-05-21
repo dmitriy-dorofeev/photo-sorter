@@ -35,6 +35,7 @@ type Config struct {
 	ModelPath   string
 	Similarity  float32
 	Concurrency int
+	TargetRoot  string // абсолютный путь к целевой папке
 }
 
 // Runner выполняет face-кластеризацию.
@@ -87,81 +88,46 @@ func (r *Runner) Close() {
 	}
 }
 
-// ApplyClustering группирует entries по датам, выполняет face-кластеризацию
-// и обновляет TargetPath: YYYY/MM-DD/ → YYYY/MM-DD/<alias>/.
+// ApplyClustering выполняет face-кластеризацию над всеми entries
+// и обновляет TargetPath: <alias>/<filename> (или no_faces/<filename>).
 func (r *Runner) ApplyClustering(ctx context.Context, entries []sorter.Entry, aliasMgr *facealias.Manager) error {
 	if r.detector == nil || r.recognizer == nil {
 		return fmt.Errorf("face models not loaded")
 	}
 
-	// Группируем entries по датовой директории
-	groups := make(map[string][]int) // dir → индексы entries
-	for i, e := range entries {
+	// Собираем пути всех non-skip entries
+	paths := make([]string, 0, len(entries))
+	for _, e := range entries {
 		if e.Skip {
 			continue
 		}
-		dir := filepath.Dir(e.Target)
-		groups[dir] = append(groups[dir], i)
+		paths = append(paths, e.Source.Path)
 	}
 
-	// Для каждой группы запускаем кластеризацию
-	var mu sync.Mutex
-	aliasMap := make(map[int]string) // entry index → alias
-
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(r.cfg.Concurrency)
-
-	for dir, indices := range groups {
-		dir := dir
-		indices := indices
-		g.Go(func() error {
-			// Собираем пути
-			paths := make([]string, len(indices))
-			for i, idx := range indices {
-				paths[i] = entries[idx].Source.Path
-			}
-			aliases, err := r.clusterGroup(ctx, dir, paths, aliasMgr)
-			if err != nil {
-				return fmt.Errorf("cluster %s: %w", dir, err)
-			}
-			mu.Lock()
-			for i, idx := range indices {
-				if alias, ok := aliases[paths[i]]; ok {
-					aliasMap[idx] = alias
-				}
-			}
-			mu.Unlock()
-			return nil
-		})
+	// Кластеризуем все файлы глобально (без группировки по датам)
+	aliases, err := r.clusterGroup(ctx, paths, aliasMgr)
+	if err != nil {
+		return fmt.Errorf("face clustering: %w", err)
 	}
 
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	// Обновляем TargetPath
+	// Обновляем TargetPath: полностью заменяем на <alias>/<basename>
 	for i := range entries {
 		if entries[i].Skip {
 			continue
 		}
-		alias, ok := aliasMap[i]
-		if !ok {
-			continue
+		alias := aliases[entries[i].Source.Path]
+		if alias == "" {
+			alias = noFacesAlias
 		}
-		dir := filepath.Dir(entries[i].Target)
 		base := filepath.Base(entries[i].Target)
-		entries[i].Target = filepath.Join(dir, alias, base)
+		entries[i].Target = filepath.Join(r.cfg.TargetRoot, alias, base)
 	}
 
 	return nil
 }
 
-// clusterGroup обрабатывает одну датовую группу файлов.
-func (r *Runner) clusterGroup(ctx context.Context, dir string, paths []string, aliasMgr *facealias.Manager) (map[string]string, error) {
-	date := filepath.Base(dir)
-	if date == sorter.UnsortedDir {
-		date = "unsorted"
-	}
+// clusterGroup обрабатывает все файлы глобально (без разбивки по датам).
+func (r *Runner) clusterGroup(ctx context.Context, paths []string, aliasMgr *facealias.Manager) (map[string]string, error) {
 
 	type faceInfo struct {
 		path      string
@@ -245,7 +211,7 @@ func (r *Runner) clusterGroup(ctx context.Context, dir string, paths []string, a
 		for i, m := range members {
 			clusterEmbeddings[i] = m.embedding
 		}
-		alias := aliasMgr.GetAlias(date, clusterEmbeddings)
+		alias := aliasMgr.GetAlias("global", clusterEmbeddings)
 		for _, m := range members {
 			result[m.path] = alias
 		}
