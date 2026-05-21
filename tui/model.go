@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync/atomic"
 
-	"photo-sorter/internal/dateresolver"
 	"photo-sorter/internal/deduper"
+	"photo-sorter/internal/depcheck"
 	"photo-sorter/internal/scanner"
 	"photo-sorter/internal/sorter"
 	"photo-sorter/internal/state"
@@ -26,6 +26,7 @@ const (
 	ScreenScan
 	ScreenPreview
 	ScreenCopy
+	ScreenDeps
 )
 
 // Model — главная модель bubbletea.
@@ -45,6 +46,7 @@ type Model struct {
 	settings   settingsModel
 	scan       scanModel
 	copy       copyModel
+	deps       depsModel
 
 	// Результаты сканирования
 	files      []scanner.FileInfo
@@ -105,6 +107,7 @@ func NewModel(version string) Model {
 		settings:     newSettingsModel(),
 		scan:         newScanModel(),
 		copy:         newCopyModel(),
+		deps:         newDepsModel(),
 		copyProgress: new(atomic.Int64),
 		copyTotal:    new(atomic.Int64),
 		theme:        NewLightTheme(),
@@ -115,22 +118,9 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		m.sources.Init(),
 		checkUpdateCmd(m.version),
-		checkExifToolCmd(),
+		checkDepsCmd(),
 		detectThemeCmd(),
 	)
-}
-
-// exifToolCheckMsg передаёт результат проверки наличия exiftool.
-type exifToolCheckMsg struct {
-	path string
-	ok   bool
-}
-
-func checkExifToolCmd() tea.Cmd {
-	return func() tea.Msg {
-		path, ok := dateresolver.FindExifTool()
-		return exifToolCheckMsg{path: path, ok: ok}
-	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -138,10 +128,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case updateCheckMsg:
 		m.updateResult = &msg.result
 		return m, nil
-	case exifToolCheckMsg:
-		m.exifToolPath = msg.path
-		if !msg.ok {
-			m.exifToolPath = ""
+	case depsCheckMsg:
+		m.deps.results = msg.results
+		for _, r := range msg.results {
+			if r.Name == "exiftool" {
+				if r.Status == depcheck.StatusOK {
+					m.exifToolPath = r.Details
+				} else {
+					m.exifToolPath = ""
+				}
+			}
+		}
+		if len(msg.results.FilterMissing()) > 0 {
+			m.screen = ScreenDeps
 		}
 		return m, nil
 	case themeMsg:
@@ -162,6 +161,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.scan.height = msg.Height
 		m.copy.width = msg.Width
 		m.copy.height = msg.Height
+		m.deps.width = msg.Width
+		m.deps.height = msg.Height
 		return m, nil
 	}
 
@@ -180,6 +181,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updatePreview(msg)
 	case ScreenCopy:
 		return m.updateCopy(msg)
+	case ScreenDeps:
+		return m.updateDeps(msg)
 	default:
 		m.screen = ScreenSources
 		return m, tea.Quit
@@ -202,6 +205,8 @@ func (m Model) View() string {
 		return m.viewPreview()
 	case ScreenCopy:
 		return m.viewCopy()
+	case ScreenDeps:
+		return m.viewDeps()
 	default:
 		return m.theme.Error.Render("Неизвестный экран. Нажмите любую клавишу для выхода.")
 	}

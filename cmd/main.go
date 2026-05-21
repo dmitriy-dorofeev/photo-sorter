@@ -13,7 +13,7 @@ import (
 	"photo-sorter/internal/collision"
 	"photo-sorter/internal/config"
 	"photo-sorter/internal/copier"
-	"photo-sorter/internal/dateresolver"
+	"photo-sorter/internal/depcheck"
 	"photo-sorter/internal/facemodels"
 	"photo-sorter/internal/notify"
 	"photo-sorter/internal/report"
@@ -21,6 +21,8 @@ import (
 	"photo-sorter/internal/sorter"
 	"photo-sorter/internal/state"
 	"photo-sorter/tui"
+
+	"runtime"
 )
 
 // version встраивается при сборке через -ldflags.
@@ -86,6 +88,7 @@ func main() {
 		useTUI            bool
 		versionFlag       bool
 		checkUpdate       bool
+		checkDeps         bool
 		writeExif         bool
 		writeSpotlight    bool
 		notifyFlag        bool
@@ -113,6 +116,7 @@ func main() {
 	flag.BoolVar(&useTUI, "tui", true, "Запустить в интерактивном TUI-режиме")
 	flag.BoolVar(&versionFlag, "version", false, "Показать версию и выйти")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Проверить наличие обновлений")
+	flag.BoolVar(&checkDeps, "check-deps", false, "Проверить зависимости и выйти")
 	flag.BoolVar(&writeExif, "write-exif", config.DefaultWriteExif, "Записывать определённую дату в EXIF (только имя/mtime)")
 	flag.BoolVar(&writeSpotlight, "write-spotlight", config.DefaultWriteSpotlight, "Записывать дату съёмки в Spotlight-теги macOS")
 	flag.BoolVar(&notifyFlag, "notify", config.DefaultNotify, "Показать системное уведомление по завершении")
@@ -175,11 +179,52 @@ func main() {
 		os.Exit(0)
 	}
 
-	exifPath, hasExif := dateresolver.FindExifTool()
-	if !hasExif {
+	depResults := depcheck.CheckAll()
+
+	if checkDeps {
+		fmt.Println(depResults.RenderText())
+		if depResults.HasMissingRequired() {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	var exifPath string
+	for _, r := range depResults {
+		if r.Name == "exiftool" {
+			if r.Status == depcheck.StatusOK {
+				exifPath = r.Details
+			}
+			break
+		}
+	}
+	if exifPath == "" {
 		fmt.Fprintln(os.Stderr, "⚠ exiftool не найден в PATH. Видео-метаданные не будут прочитаны, запись EXIF отключена.")
 		if writeExif {
 			writeExif = false
+		}
+	}
+
+	for _, r := range depResults {
+		if r.Status == depcheck.StatusMissing {
+			fmt.Fprintf(os.Stderr, "⚠ %s не найден: %s\n", r.Name, r.Description)
+			if hint := r.InstallHint[runtime.GOOS]; hint != "" {
+				fmt.Fprintf(os.Stderr, "  Установка: %s\n", hint)
+			}
+		}
+	}
+
+	if sortMode == "face" {
+		onnxOK := false
+		for _, r := range depResults {
+			if r.Name == "ONNX Runtime" && r.Status == depcheck.StatusOK {
+				onnxOK = true
+				break
+			}
+		}
+		if !onnxOK {
+			fmt.Fprintln(os.Stderr, "⚠ ONNX Runtime не найден. Face-режим недоступен, переключение на сортировку по датам.")
+			sortMode = "date"
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"photo-sorter/internal/config"
+	"photo-sorter/internal/depcheck"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -501,6 +502,19 @@ func (m Model) updateSettingsNav(msg tea.Msg) (tea.Model, tea.Cmd) {
 					item.choiceIdx = 0
 				}
 				item.stringValue = item.choiceValues[item.choiceIdx]
+				if item.key == "sort_mode" && item.stringValue == "face" {
+					onnxMissing := false
+					for _, r := range m.deps.results {
+						if r.Name == "ONNX Runtime" && r.Status == depcheck.StatusMissing {
+							onnxMissing = true
+							break
+						}
+					}
+					if onnxMissing {
+						item.choiceIdx = 0
+						item.stringValue = "date"
+					}
+				}
 				if item.key == "theme" {
 					mode := ThemeModeAuto
 					switch item.stringValue {
@@ -618,6 +632,18 @@ func (m Model) viewSettings() string {
 
 	if m.exifToolPath == "" {
 		b.WriteString(m.theme.Error.Render("⚠ exiftool не найден: видео-метаданные и запись EXIF недоступны.") + "\n")
+		b.WriteString("\n")
+	}
+
+	onnxMissing := false
+	for _, r := range m.deps.results {
+		if r.Name == "ONNX Runtime" && r.Status == depcheck.StatusMissing {
+			onnxMissing = true
+			break
+		}
+	}
+	if onnxMissing {
+		b.WriteString(m.theme.Error.Render("⚠ ONNX Runtime не найден: режим «По людям (face)» недоступен.") + "\n")
 		b.WriteString("\n")
 	}
 
