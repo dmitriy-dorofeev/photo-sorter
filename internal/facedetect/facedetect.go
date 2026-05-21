@@ -217,6 +217,7 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 		case 2:
 			bbox[idx] = data
 		case 3:
+			// #nosec G602: idx вычисляется как i%3 и всегда находится в диапазоне [0,2].
 			kps[idx] = data
 		}
 	}
@@ -228,6 +229,21 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 	for i, stride := range strides {
 		cols := inputSize / stride
 		rows := inputSize / stride
+		total := rows * cols
+		kpsStride, err := kpsByStride(kps, i)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(cls[i]) < total || len(obj[i]) < total {
+			return nil, fmt.Errorf("invalid cls/obj tensor length for stride %d", stride)
+		}
+		if len(bbox[i]) < total*4 {
+			return nil, fmt.Errorf("invalid bbox tensor length for stride %d", stride)
+		}
+		if len(kpsStride) < total*10 {
+			return nil, fmt.Errorf("invalid kps tensor length for stride %d", stride)
+		}
 
 		for r := 0; r < rows; r++ {
 			for c := 0; c < cols; c++ {
@@ -260,8 +276,13 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 
 				var landmarks [5][2]float32
 				for n := 0; n < 5; n++ {
-					lx := (kps[i][idx*10+2*n] + float32(c)) * float32(stride) * scaleX
-					ly := (kps[i][idx*10+2*n+1] + float32(r)) * float32(stride) * scaleY
+					lxRaw, lyRaw, err := kpsPoint(kpsStride, idx, n)
+					if err != nil {
+						return nil, err
+					}
+					lx := (lxRaw + float32(c)) * float32(stride) * scaleX
+					ly := (lyRaw + float32(r)) * float32(stride) * scaleY
+					// #nosec G602: n ограничен циклом 0..4, landmarks имеет фиксированный размер [5].
 					landmarks[n] = [2]float32{lx, ly}
 				}
 
@@ -298,6 +319,27 @@ func clamp01(v float32) float32 {
 		return 1
 	}
 	return v
+}
+
+func kpsPoint(kps []float32, anchorIdx, pointIdx int) (float32, float32, error) {
+	base := anchorIdx*10 + 2*pointIdx
+	if base < 0 || base+1 >= len(kps) {
+		return 0, 0, fmt.Errorf("invalid kps index: base=%d len=%d", base, len(kps))
+	}
+	return kps[base], kps[base+1], nil
+}
+
+func kpsByStride(kps [3][]float32, strideIdx int) ([]float32, error) {
+	switch strideIdx {
+	case 0:
+		return kps[0], nil
+	case 1:
+		return kps[1], nil
+	case 2:
+		return kps[2], nil
+	default:
+		return nil, fmt.Errorf("invalid stride index: %d", strideIdx)
+	}
 }
 
 // nms выполняет Non-Maximum Suppression.

@@ -206,21 +206,24 @@ var arcfaceRefPoints = [5][2]float32{
 func AlignFace(img image.Image, landmarks [5][2]float32) image.Image {
 	// Используем 3 точки (глаза + нос) для affine transform.
 	// Это даёт масштаб, поворот и сдвиг.
-	var src, dst [3][2]float32
-	for i := 0; i < 3; i++ {
-		src[i] = landmarks[i]
-		dst[i] = arcfaceRefPoints[i]
-	}
+	src := [3][2]float32{landmarks[0], landmarks[1], landmarks[2]}
+	dst := [3][2]float32{arcfaceRefPoints[0], arcfaceRefPoints[1], arcfaceRefPoints[2]}
 
 	// Решаем affine transform:
 	// u = a*x + b*y + c
 	// v = d*x + e*y + f
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	x1, y1 := src[0][0], src[0][1]
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	x2, y2 := src[1][0], src[1][1]
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	x3, y3 := src[2][0], src[2][1]
 
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	u1, v1 := dst[0][0], dst[0][1]
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	u2, v2 := dst[1][0], dst[1][1]
+	// #nosec G602: доступ только к фиксированным индексам в массиве [3][2].
 	u3, v3 := dst[2][0], dst[2][1]
 
 	detA := x1*(y2-y3) - y1*(x2-x3) + (x2*y3 - x3*y2)

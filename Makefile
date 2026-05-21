@@ -20,9 +20,9 @@ test:
 
 # Установка тех же версий анализаторов, что используются в CI.
 tools-ci:
-	go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
-	go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-	go install github.com/securego/gosec/v2/cmd/gosec@v2.22.5
+	go install honnef.co/go/tools/cmd/staticcheck@2026.1
+	go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+	go install github.com/securego/gosec/v2/cmd/gosec@v2.22.11
 
 # Проверка, что в репозитории нет неотформатированных Go-файлов.
 fmt-check:
