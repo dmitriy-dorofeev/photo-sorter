@@ -130,7 +130,7 @@ make release-major   # v0.1.0 → v1.0.0
 
 После пуша тега автоматически запускается `Release`-workflow (GoReleaser).
 
-GoReleaser автоматически обновляет формулу `photo-sorter` в репозитории `dmitriy-dorofeev/homebrew-tap` при каждом релизе.
+GoReleaser автоматически обновляет cask `photo-sorter` в репозитории `dmitriy-dorofeev/homebrew-tap` при каждом релизе.
 
 Через GitHub UI: **Actions → Bump Version → Run workflow** — выбрать `patch` / `minor` / `major`. Workflow создаст тег и сразу запустит GoReleaser (не ждёт отдельного триггера `push: tags`).
 

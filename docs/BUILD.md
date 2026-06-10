@@ -58,7 +58,7 @@ GitHub Actions запустит [GoReleaser](https://goreleaser.com/), кото�
 - упакует их в архивы `.tar.gz`;
 - сгенерирует `checksums.txt`;
 - создаст страницу Release на GitHub с changelog;
-- автоматически обновит формулу в [homebrew-tap](https://github.com/dmitriy-dorofeev/homebrew-tap).
+- автоматически обновит cask в [homebrew-tap](https://github.com/dmitriy-dorofeev/homebrew-tap).
 
 Также можно запустить бамп версии через GitHub UI: **Actions → Bump Version → Run workflow**.
 
