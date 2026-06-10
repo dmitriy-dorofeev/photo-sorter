@@ -6,7 +6,16 @@
 - **`exiftool`** — опционально, но рекомендуется для видео и записи EXIF
 - **`onnxruntime`** — опционально, только для режима сортировки по лицам (`--sort-mode=face`)
 
-## Установка бинарника
+## Установка через Homebrew (рекомендуется)
+
+```bash
+brew tap dmitriy-dorofeev/tap
+brew install photo-sorter
+```
+
+Homebrew-формула поддерживает macOS (Intel и Apple Silicon) и Linux (x86_64, ARM64).
+
+## Установка бинарника вручную
 
 Готовые бинарники доступны на странице [Releases](https://github.com/dmitriy-dorofeev/photo-sorter/releases).
 

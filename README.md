@@ -23,7 +23,14 @@
 
 ### Установка
 
-Скачайте бинарник под свою платформу со страницы [Releases](https://github.com/dmitriy-dorofeev/photo-sorter/releases/latest):
+**Через Homebrew (рекомендуется):**
+
+```bash
+brew tap dmitriy-dorofeev/tap
+brew install photo-sorter
+```
+
+**Или скачайте бинарник вручную** со страницы [Releases](https://github.com/dmitriy-dorofeev/photo-sorter/releases/latest):
 
 ```bash
 # macOS Apple Silicon

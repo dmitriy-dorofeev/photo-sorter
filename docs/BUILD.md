@@ -57,7 +57,8 @@ GitHub Actions запустит [GoReleaser](https://goreleaser.com/), кото�
 - соберёт бинарники для **macOS** (Intel + Apple Silicon) и **Linux** (x86_64 + ARM64);
 - упакует их в архивы `.tar.gz`;
 - сгенерирует `checksums.txt`;
-- создаст страницу Release на GitHub с changelog.
+- создаст страницу Release на GitHub с changelog;
+- автоматически обновит формулу в [homebrew-tap](https://github.com/dmitriy-dorofeev/homebrew-tap).
 
 Также можно запустить бамп версии через GitHub UI: **Actions → Bump Version → Run workflow**.
 
