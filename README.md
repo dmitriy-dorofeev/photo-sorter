@@ -32,8 +32,6 @@ tar -xzf photo-sorter_Darwin_arm64.tar.gz
 ./photo-sorter --version
 ```
 
-Для macOS также доступен `.app` bundle — см. [документацию по сборке](./docs/BUILD.md#macos-app-bundle).
-
 ### Запуск
 
 **Интерактивный режим (TUI):**
@@ -67,7 +65,7 @@ tar -xzf photo-sorter_Darwin_arm64.tar.gz
 
 ## Поддерживаемые платформы
 
-- **macOS** — Intel и Apple Silicon, доступен `.app` bundle
+- **macOS** — Intel и Apple Silicon
 - **Linux** — x86_64, ARM64
 - **BSD** — совместимость через `unix.Statfs`
 - **Windows** — требуется адаптация проверки свободного места на диске

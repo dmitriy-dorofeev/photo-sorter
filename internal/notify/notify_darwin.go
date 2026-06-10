@@ -45,12 +45,7 @@ func sendWithTerminalNotifier(title, body string) error {
 		"-message", body,
 	}
 
-	// Если запущены из .app bundle — указываем sender (бандл из build/macos/Info.plist).
-	if sender := appBundleID(); sender != "" {
-		args = append(args, "-sender", sender)
-	}
-
-	// Если нашли файл иконки — показываем её явно.
+	// Если нашли файл иконки рядом с бинарником — показываем её явно.
 	if icon := appIconPath(); icon != "" {
 		args = append(args, "-appIcon", icon)
 	}
@@ -150,24 +145,7 @@ func extractTerminalNotifier(dst string) error {
 	return nil
 }
 
-// appBundleID возвращает bundle ID если photo-sorter запущен из .app bundle.
-func appBundleID() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return ""
-	}
-	// Проверяем структуру .app bundle.
-	if strings.Contains(exe, ".app/Contents/MacOS/") {
-		return "com.photosorter.app"
-	}
-	return ""
-}
-
-// appIconPath ищет файл иконки рядом с бинарником или внутри .app bundle.
+// appIconPath ищет файл иконки рядом с бинарником.
 func appIconPath() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -179,20 +157,12 @@ func appIconPath() string {
 	}
 	dir := filepath.Dir(exe)
 
-	candidates := []string{
-		// Внутри .app bundle
-		filepath.Join(dir, "..", "Resources", "photo-sorter.icns"),
-		// Рядом с бинарником (для обычной сборки)
-		filepath.Join(dir, "photo-sorter.icns"),
+	iconPath := filepath.Join(dir, "photo-sorter.icns")
+	if p, err := filepath.Abs(iconPath); err == nil {
+		iconPath = p
 	}
-
-	for _, c := range candidates {
-		if p, err := filepath.Abs(c); err == nil {
-			c = p
-		}
-		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
-			return c
-		}
+	if fi, err := os.Stat(iconPath); err == nil && !fi.IsDir() {
+		return iconPath
 	}
 	return ""
 }

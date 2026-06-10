@@ -149,10 +149,6 @@ make release-major   # v0.1.0 → v1.0.0
 # Сборка бинарника (через Makefile, с встраиванием версии)
 make build
 
-# Сборка .app bundle для macOS (с иконкой в Finder)
-# Положите иконку 1024×1024 в build/macos/icon.png перед сборкой
-make build-mac-app
-
 # Или вручную с указанием версии
 go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o photo-sorter ./cmd
 
@@ -194,7 +190,6 @@ go test ./internal/ -run TestCancellation -v
 go test ./cmd/ -run TestCLI -v
 
 # Локальная сборка релиза (snapshot) без публикации
-# Для macOS автоматически создаётся .app bundle в dist/*.app.zip
 make snapshot
 ```
 
@@ -235,7 +230,7 @@ make snapshot
    - `text` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.log` (как раньше, строки с timestamp).
    - `html` — `YYYY-MM-DD_HH-MM-SS_photo-sorter.html` (визуальная страница с карточками статистики, таблицами дубликатов, ошибок и unsorted-файлов).
    Формат выбирается флагом `--report-format` (CLI) или настройкой «Формат отчёта» в TUI. При `dry-run` файл отчёта не создаётся.
-11. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой. На macOS приоритет отдаётся `terminal-notifier` (встроен в бинарник): если приложение запущено из `.app` bundle, уведомление отправляется с `-sender com.photosorter.app` и `-appIcon` (иконка из `build/macos/photo-sorter.icns`). Если `terminal-notifier` недоступен — fallback на `osascript display notification` (без иконки). Вызывается после report в TUI и CLI, если включена настройка.
+11. **notify** — отправляет системное уведомление (Notification Center на macOS, `notify-send` на Linux) с краткой статистикой. На macOS приоритет отдаётся `terminal-notifier` (встроен в бинарник): если рядом с бинарником найден файл `photo-sorter.icns`, он передаётся как `-appIcon`. Если `terminal-notifier` недоступен — fallback на `osascript display notification` (без иконки). Вызывается после report в TUI и CLI, если включена настройка.
 12. **updater** — проверяет наличие новой версии на GitHub Releases и выполняет self-update бинарника.
 
 ### Инкрементальные запуски (поведение по умолчанию)

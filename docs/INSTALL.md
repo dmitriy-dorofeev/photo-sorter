@@ -17,8 +17,6 @@ tar -xzf photo-sorter_Darwin_arm64.tar.gz
 ./photo-sorter --version
 ```
 
-Для macOS также доступен `.app` bundle — см. [BUILD.md](./BUILD.md#macos-app-bundle).
-
 ## Установка Go
 
 Требуется только если вы собираете проект из исходников.

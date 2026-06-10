@@ -20,39 +20,6 @@ go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o p
 
 > Без `-ldflags` приложение сообщит версию `dev`, и автообновление будет недоступно.
 
-## macOS .app bundle
-
-Для удобства на macOS можно собрать приложение как `.app` bundle с иконкой в Finder.
-
-```bash
-make build-mac-app
-```
-
-Результат:
-- `bin/Photo Sorter.app/` — готовый bundle
-- `bin/Photo Sorter.app.zip` — zip-архив для распространения
-
-### Иконка
-
-Чтобы у bundle была иконка, положите PNG размером **1024×1024** в `build/macos/icon.png` перед сборкой. Скрипт автоматически сконвертирует её в `.icns`.
-
-### Как запускать
-
-1. Распакуйте `Photo Sorter.app.zip`.
-2. (Опционально) Перетащите `Photo Sorter.app` в `Applications`.
-3. Двойной клик по иконке — откроется **Terminal** и в нём запустится TUI.
-
-> Поскольку photo-sorter — консольное TUI-приложение, `.app` bundle открывает Terminal. Это ожидаемое поведение.
-
-### Обновление внутри .app bundle
-
-Команда `update` работает и из `.app`, но с ограничениями:
-- Обновляется только бинарник внутри `Photo Sorter.app/Contents/MacOS/photo-sorter`.
-- Wrapper, `Info.plist` и иконка останутся от первоначальной версии.
-- Если приложение установлено в `/Applications/`, могут потребоваться права администратора.
-
-При мажорных обновлениях рекомендуется скачивать новый `.app.zip` вручную.
-
 ## Версионирование
 
 Проект следует [Semantic Versioning](https://semver.org/lang/ru/): `vMAJOR.MINOR.PATCH`.
@@ -89,7 +56,6 @@ git push origin v1.0.0
 GitHub Actions запустит [GoReleaser](https://goreleaser.com/), который:
 - соберёт бинарники для **macOS** (Intel + Apple Silicon) и **Linux** (x86_64 + ARM64);
 - упакует их в архивы `.tar.gz`;
-- для **macOS** дополнительно создаст `.app.zip` с иконкой и bundle;
 - сгенерирует `checksums.txt`;
 - создаст страницу Release на GitHub с changelog.
 
