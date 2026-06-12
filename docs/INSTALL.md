@@ -10,10 +10,20 @@
 
 ```bash
 brew tap dmitriy-dorofeev/tap
-brew install photo-sorter
+brew install --cask photo-sorter
 ```
 
-Homebrew-формула поддерживает macOS (Intel и Apple Silicon) и Linux (x86_64, ARM64).
+Cask поддерживает macOS (Intel и Apple Silicon) и Linux (x86_64, ARM64).
+
+### macOS: Gatekeeper и quarantine
+
+Так как `photo-sorter` не подписан сертификатом Apple, macOS может поместить загруженный бинарник в карантин и при первом запуске показать предупреждение «Не удаётся проверить разработчика». В этом случае бинарник можно разрешить в Системных настройках → Конфиденциальность и безопасность → Основные → «Всё равно открыть».
+
+В актуальных версиях Homebrew флаг `--no-quarantine` больше не работает, поэтому после установки снимите атрибут quarantine вручную:
+
+```bash
+xattr -dr com.apple.quarantine "$(which photo-sorter)"
+```
 
 ## Установка бинарника вручную
 

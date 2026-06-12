@@ -27,8 +27,16 @@
 
 ```bash
 brew tap dmitriy-dorofeev/tap
-brew install photo-sorter
+brew install --cask photo-sorter
 ```
+
+> **macOS и Gatekeeper:** так как `photo-sorter` не подписан сертификатом Apple, при первом запуске macOS может заблокировать бинарник и показать предупреждение «Не удаётся проверить разработчика». В актуальных версиях Homebrew флаг `--no-quarantine` больше не работает, поэтому после установки снимите атрибут quarantine вручную:
+>
+> ```bash
+> xattr -dr com.apple.quarantine "$(which photo-sorter)"
+> ```
+>
+> Или разрешите бинарник в Системных настройках → Конфиденциальность и безопасность → Основные → «Всё равно открыть».
 
 **Или скачайте бинарник вручную** со страницы [Releases](https://github.com/dmitriy-dorofeev/photo-sorter/releases/latest):
 

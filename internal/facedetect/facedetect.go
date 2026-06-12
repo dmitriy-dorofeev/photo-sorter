@@ -37,6 +37,15 @@ type Detector struct {
 	mu   sync.Mutex
 }
 
+type preprocessMeta struct {
+	origW int
+	origH int
+	newW  int
+	newH  int
+	padX  int
+	padY  int
+}
+
 // NewDetector создаёт детектор из файла модели.
 func NewDetector(modelPath string) (*Detector, error) {
 	sess, err := onnxhelper.NewSession(modelPath)
@@ -63,7 +72,7 @@ func (d *Detector) Detect(ctx context.Context, img image.Image) ([]FaceBox, erro
 	defer d.mu.Unlock()
 
 	// Предобработка: resize до 640×640, RGB, float32 [0,255]
-	tensorData, origW, origH := preprocess(img)
+	tensorData, meta := preprocess(img)
 
 	inputShape := []int64{1, 3, inputSize, inputSize}
 	inputValue, err := onnxruntime.NewTensorValue(d.sess.Runtime, tensorData, inputShape)
@@ -77,11 +86,8 @@ func (d *Detector) Detect(ctx context.Context, img image.Image) ([]FaceBox, erro
 	if err != nil {
 		return nil, fmt.Errorf("inference: %w", err)
 	}
-	for _, v := range outputs {
-		defer v.Close()
-	}
-
-	faces, err := postprocess(outputs, origW, origH)
+	faces, err := postprocess(outputs, meta)
+	closeOutputValues(outputs)
 	if err != nil {
 		return nil, fmt.Errorf("postprocess: %w", err)
 	}
@@ -92,29 +98,32 @@ func (d *Detector) Detect(ctx context.Context, img image.Image) ([]FaceBox, erro
 // preprocess преобразует image.Image в NCHW float32 тензор.
 // Использует letterbox (сохранение aspect ratio + паддинг до inputSize),
 // как в референсной реализации OpenCV FaceDetectorYN.
-func preprocess(img image.Image) (data []float32, origW, origH int) {
+func preprocess(img image.Image) (data []float32, meta preprocessMeta) {
 	bounds := img.Bounds()
-	origW = bounds.Dx()
-	origH = bounds.Dy()
+	meta.origW = bounds.Dx()
+	meta.origH = bounds.Dy()
 
 	// Масштабируем с сохранением пропорций, чтобы поместиться в inputSize.
-	// Если изображение меньше inputSize — просто центрируем без upscale.
-	var newW, newH int
-	if origW <= inputSize && origH <= inputSize {
-		newW, newH = origW, origH
+	// Для маленьких изображений upscale не делаем, только центрируем в canvas.
+	if meta.origW <= inputSize && meta.origH <= inputSize {
+		meta.newW, meta.newH = meta.origW, meta.origH
 	} else {
-		scale := min(float64(inputSize)/float64(origW), float64(inputSize)/float64(origH))
-		newW = int(float64(origW) * scale)
-		newH = int(float64(origH) * scale)
+		scale := min(float64(inputSize)/float64(meta.origW), float64(inputSize)/float64(meta.origH))
+		meta.newW = int(float64(meta.origW) * scale)
+		meta.newH = int(float64(meta.origH) * scale)
 	}
+	meta.padX = (inputSize - meta.newW) / 2
+	meta.padY = (inputSize - meta.newH) / 2
 
 	data = make([]float32, 3*inputSize*inputSize)
 	for y := 0; y < inputSize; y++ {
 		for x := 0; x < inputSize; x++ {
 			var r, g, b float32
-			if x < newW && y < newH {
-				srcX := float64(x) * float64(origW) / float64(newW)
-				srcY := float64(y) * float64(origH) / float64(newH)
+			lx := x - meta.padX
+			ly := y - meta.padY
+			if lx >= 0 && lx < meta.newW && ly >= 0 && ly < meta.newH {
+				srcX := float64(lx) * float64(meta.origW) / float64(meta.newW)
+				srcY := float64(ly) * float64(meta.origH) / float64(meta.newH)
 				r, g, b = sampleRGB(img, srcX, srcY)
 			}
 			// padding — уже нули
@@ -124,14 +133,7 @@ func preprocess(img image.Image) (data []float32, origW, origH int) {
 			data[2*inputSize*inputSize+idx] = b // B
 		}
 	}
-	return data, origW, origH
-}
-
-func min(a, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
+	return data, meta
 }
 
 // sampleRGB выполняет билинейную интерполяцию пикселя.
@@ -184,7 +186,7 @@ func clamp(v, min, max int) int {
 }
 
 // postprocess декодирует выходы YuNet и применяет NMS.
-func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]FaceBox, error) {
+func postprocess(outputs map[string]*onnxruntime.Value, meta preprocessMeta) ([]FaceBox, error) {
 	// Извлекаем float32 тензоры из outputs
 	var cls [3][]float32
 	var obj [3][]float32
@@ -222,8 +224,10 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 		}
 	}
 
-	scaleX := float32(origW) / float32(inputSize)
-	scaleY := float32(origH) / float32(inputSize)
+	scaleX := float32(meta.origW) / float32(meta.newW)
+	scaleY := float32(meta.origH) / float32(meta.newH)
+	padX := float32(meta.padX)
+	padY := float32(meta.padY)
 
 	var faces []FaceBox
 	for i, stride := range strides {
@@ -268,11 +272,15 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 				x2 := cx + w/2
 				y2 := cy + h/2
 
-				// Scale back to original image
-				x1 *= scaleX
-				y1 *= scaleY
-				x2 *= scaleX
-				y2 *= scaleY
+				// Scale back to original image c учётом centered letterbox.
+				x1 = (x1 - padX) * scaleX
+				y1 = (y1 - padY) * scaleY
+				x2 = (x2 - padX) * scaleX
+				y2 = (y2 - padY) * scaleY
+				x1 = max(0, min(x1, float32(meta.origW)))
+				y1 = max(0, min(y1, float32(meta.origH)))
+				x2 = max(0, min(x2, float32(meta.origW)))
+				y2 = max(0, min(y2, float32(meta.origH)))
 
 				var landmarks [5][2]float32
 				for n := 0; n < 5; n++ {
@@ -280,8 +288,10 @@ func postprocess(outputs map[string]*onnxruntime.Value, origW, origH int) ([]Fac
 					if err != nil {
 						return nil, err
 					}
-					lx := (lxRaw + float32(c)) * float32(stride) * scaleX
-					ly := (lyRaw + float32(r)) * float32(stride) * scaleY
+					lx := ((lxRaw+float32(c))*float32(stride) - padX) * scaleX
+					ly := ((lyRaw+float32(r))*float32(stride) - padY) * scaleY
+					lx = max(0, min(lx, float32(meta.origW)))
+					ly = max(0, min(ly, float32(meta.origH)))
 					// #nosec G602: n ограничен циклом 0..4, landmarks имеет фиксированный размер [5].
 					landmarks[n] = [2]float32{lx, ly}
 				}
@@ -319,6 +329,12 @@ func clamp01(v float32) float32 {
 		return 1
 	}
 	return v
+}
+
+func closeOutputValues(outputs map[string]*onnxruntime.Value) {
+	for _, v := range outputs {
+		v.Close()
+	}
 }
 
 func kpsPoint(kps []float32, anchorIdx, pointIdx int) (float32, float32, error) {
@@ -376,8 +392,8 @@ func nms(faces []FaceBox, threshold float32, maxCount int) []int {
 func iou(a, b FaceBox) float32 {
 	x1 := max(a.X1, b.X1)
 	y1 := max(a.Y1, b.Y1)
-	x2 := min32(a.X2, b.X2)
-	y2 := min32(a.Y2, b.Y2)
+	x2 := min(a.X2, b.X2)
+	y2 := min(a.Y2, b.Y2)
 
 	inter := max(0, x2-x1) * max(0, y2-y1)
 	areaA := (a.X2 - a.X1) * (a.Y2 - a.Y1)
@@ -387,17 +403,4 @@ func iou(a, b FaceBox) float32 {
 		return 0
 	}
 	return inter / union
-}
-
-func max(a, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
-}
-func min32(a, b float32) float32 {
-	if a < b {
-		return a
-	}
-	return b
 }

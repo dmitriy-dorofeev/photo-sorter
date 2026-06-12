@@ -15,6 +15,8 @@ import (
 )
 
 const inputSize = 112
+const embeddingSize = 512
+const arcFaceOutputName = "516"
 
 // Recognizer загружает ArcFace-модель и извлекает embedding'и.
 type Recognizer struct {
@@ -60,22 +62,25 @@ func (r *Recognizer) Embedding(ctx context.Context, img image.Image) ([]float32,
 	if err != nil {
 		return nil, fmt.Errorf("inference: %w", err)
 	}
-	for _, v := range outputs {
-		defer v.Close()
-	}
-
-	out, ok := outputs["516"]
+	out, ok := outputs[arcFaceOutputName]
 	if !ok {
-		return nil, fmt.Errorf("output 516 not found")
+		closeOutputValues(outputs)
+		return nil, fmt.Errorf("output %s not found", arcFaceOutputName)
 	}
 	data, _, err := onnxruntime.GetTensorData[float32](out)
 	if err != nil {
+		closeOutputValues(outputs)
 		return nil, fmt.Errorf("read output: %w", err)
+	}
+	if len(data) != embeddingSize {
+		closeOutputValues(outputs)
+		return nil, fmt.Errorf("unexpected embedding size: got %d, want %d", len(data), embeddingSize)
 	}
 
 	// L2 нормализация
-	emb := make([]float32, 512)
+	emb := make([]float32, embeddingSize)
 	copy(emb, data)
+	closeOutputValues(outputs)
 	normalizeL2(emb)
 	return emb, nil
 }
@@ -202,7 +207,7 @@ var arcfaceRefPoints = [5][2]float32{
 }
 
 // AlignFace выполняет affine alignment лица по 5 landmarks для ArcFace.
-// Возвращает выровненное изображение 112×112.
+// Обычно возвращает 112×112; в вырожденном случае возвращает квадратный center crop.
 func AlignFace(img image.Image, landmarks [5][2]float32) image.Image {
 	// Используем 3 точки (глаза + нос) для affine transform.
 	// Это даёт масштаб, поворот и сдвиг.
@@ -365,4 +370,10 @@ func abs(v float32) float32 {
 		return -v
 	}
 	return v
+}
+
+func closeOutputValues(outputs map[string]*onnxruntime.Value) {
+	for _, v := range outputs {
+		v.Close()
+	}
 }
